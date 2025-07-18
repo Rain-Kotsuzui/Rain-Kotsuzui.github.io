@@ -356,6 +356,9 @@
         }
 
         /* --- 图片占位符样式 --- */
+
+
+
         .image-placeholder {
             width: 100%;
             aspect-ratio: 16 / 9;
@@ -639,7 +642,7 @@
                 <h3 class="animated fade-in-down">可嵌入传统图形渲染管线的</h3>
                 <h1 class="animated fade-in-down delay-1">基于Transformer的快速PBR渲染方案</h1>
             </div>
-            <h3 class="animated fade-in-up delay-2" style="margin-top: 5vh;">报告：雨伞鱼</h3>
+            <h3 class="animated fade-in-up delay-2" style="margin-top: 5vh;">报告人：苏世瑞 李嘉祥</h3>
         </section>
 
         <!-- 幻灯片 2: PBR算力黑洞 -->
@@ -652,149 +655,150 @@
                         <p>一张1K图像有超 <strong>100万</strong> 像素。为消除噪点，每个像素需采样 <strong>100+</strong> 次，这意味着初始就有超
                             <strong>1亿</strong> 条光线要追踪。
                         </p>
-                        <div class="image-placeholder">图片: 1024x1024像素网格，充满噪点</div>
+                        <img src="title-1.png" class="image-placeholder">
                     </div>
+
                     <div class="comparison-card">
                         <h3>光线弹射：指数爆炸</h3>
                         <p>每条光线在场景中平均弹射 <strong>8-16</strong> 次才能找到光源，每次弹射都要和所有物体求交。总计算量轻松突破 <strong>数十亿</strong>。</p>
-                        <div class="image-placeholder">图片: 光线在玻璃材质中复杂弹射的路径图</div>
+                        <img src="title-2.png" class="image-placeholder">
                     </div>
                 </div>
+
                 <div id="pbr-part-2" class="comparison-grid two-item-grid">
                     <div class="comparison-card">
                         <h3>硬件瓶颈：分钟级等待</h3>
                         <p>即便在顶级的RTX 4090上，渲染一张包含复杂材质的“简单”场景，耗时也以 <strong>分钟</strong> 计算，无法用于实时交互。</p>
-                        <div class="image-placeholder">图片: 一块RTX 4090显卡旁有时钟的图片</div>
+                        <img src="title-3.png" class="image-placeholder">
                     </div>
                     <div class="comparison-card">
                         <h3>电影级代价：天级渲染</h3>
                         <p>当涉及皮肤（次表面散射）、烟雾（体渲染）等效果，单帧画面在专业渲染农场耗费 <strong>数小时</strong> 甚至 <strong>数天</strong> 都是常态。</p>
-                        <div class="image-placeholder">图片: 电影《阿凡达》中角色的皮肤特写</div>
+                        <img src="title-4.png" class="image-placeholder">
                     </div>
                 </div>
             </div>
-        </section>
-        <!-- 幻灯片 3: 核心技术 -->
-        <section class="slide" id="slide-3">
-            <div class="two-col-layout">
-                <div class="col-left animated fade-in-down">
-                    <h3>序列到序列<span>的核心思想</span></h3>
-                </div>
-                <div class="col-right">
-                    <h2 class="animated fade-in-down delay-1">核心技术解读:</h2>
-                    <ul class="animated fade-in-up delay-2">
-                        <li><strong>两阶段架构:</strong> 视图无关的光照计算 + 视图相关的成像渲染。</li>
-                        <li class="delay-1"><strong>关键创新:</strong>
-                            采用<strong>3D相对位置编码(RoPE)</strong>，使Transformer能够理解三维空间中的几何关系。</li>
-                    </ul>
-                </div>
+    </div>
+    </section>
+    <!-- 幻灯片 3: 核心技术 -->
+    <section class="slide" id="slide-3">
+        <div class="two-col-layout">
+            <div class="col-left animated fade-in-down">
+                <h3>序列到序列<span>的核心思想</span></h3>
             </div>
-            <!-- === 代码开始：在此处添加图片占位符 === -->
-            <div class="image-placeholder_1 animated fade-in-up delay-3">
-                图片: 两阶段模型架构图
+            <div class="col-right">
+                <h2 class="animated fade-in-down delay-1">核心技术解读:</h2>
+                <ul class="animated fade-in-up delay-2">
+                    <li><strong>两阶段架构:</strong> 视图无关的光照计算 + 视图相关的成像渲染。</li>
+                    <li class="delay-1"><strong>关键创新:</strong>
+                        采用<strong>3D相对位置编码</strong>，使Transformer能够理解三维空间中的几何关系。</li>
+                </ul>
             </div>
-            <!-- === 代码结束 === -->
-        </section>
+        </div>
+        <!-- === 代码开始：在此处添加图片占位符 === -->
+        <img src="title.png" class="image-placeholder_1 animated fade-in-up delay-3">
+        <!-- === 代码结束 === -->
+    </section>
 
-        <!-- 幻灯片 4: 对比分析 -->
-        <section class="slide" id="slide-4">
-            <h2 class="animated fade-in-down">对比分析：神经渲染的定位</h2>
-            <div class="comparison-grid">
-                <div class="comparison-card animated fade-in-up delay-1">
-                    <h3>vs. 路径追踪</h3>
-                    <ul>
-                        <li><strong>改进:</strong> 速度快百倍、输出无噪点、天然可微。</li>
-                        <li><strong>代价:</strong> 泛化能力受限于训练数据。</li>
-                    </ul>
-                </div>
-                <div class="comparison-card animated fade-in-up delay-2">
-                    <h3>vs. NeRF / 高斯溅射</h3>
-                    <ul>
-                        <li><strong>目标:</strong> 创作 (我们的方案) vs. 复刻 (NeRF)。</li>
-                        <li><strong>输入:</strong> 3D模型 vs. 真实照片。</li>
-                        <li><strong>本质:</strong> <strong>渲染引擎</strong> vs. <strong>3D扫描仪</strong>。</li>
-                    </ul>
-                </div>
+    <!-- 幻灯片 4: 对比分析 -->
+    <section class="slide" id="slide-4">
+        <h2 class="animated fade-in-down">对比分析：神经渲染的定位</h2>
+        <div class="comparison-grid">
+            <div class="comparison-card animated fade-in-up delay-1">
+                <h3>vs. 路径追踪</h3>
+                <ul>
+                    <li><strong>改进:</strong> 速度快百倍、输出无噪点、天然可微。</li>
+                    <li><strong>代价:</strong> 泛化能力受限于训练数据。</li>
+                </ul>
             </div>
-        </section>
-
-        <!-- 幻灯片 5: 现状与局限 -->
-        <section class="slide" id="slide-5">
-            <h2 class="animated fade-in-down">研究现状与局限性</h2>
-            <p class="animated fade-in-up delay-1">Transformer的注意力机制是核心瓶颈:</p>
-            <div class="impact-text animated fade-in-up delay-2">O(N²)</div>
-            <p class="animated fade-in-up delay-3">二次方复杂度导致其难以处理高面数的复杂场景，极大地限制了实用性。</p>
-        </section>
-
-        <!-- 幻灯片 6: 研究方案 (全新斜切布局) -->
-        <section class="slide" id="slide-6">
-            <h2 class="slide-title animated fade-in-down">我们的研究方案</h2>
-            <div class="dual-column-slanted-layout">
-                <div class="column-left animated fade-in-up delay-1">
-                    <h4>模型性能优化</h4>
-                    <ol>
-                        <li>利用Transformer-VQ的<strong>线性复杂度</strong>架构，通过向量量化将自注意力计算开销从O(N²)降至O(N)。</li>
-                        <li class="delay-1"><strong>码本注意力压缩：</strong> 使用固定码本聚类Key向量，将全局注意力转化为常量级查表运算。</li>
-                        <li class="delay-2"><strong>递归分解计算：</strong> 通过Δ<sup>⊤</sup>V矩阵分解实现因果注意力，显存消耗降低80%+。</li>
-                    </ol>
-                </div>
-                <div class="column-right animated fade-in-up delay-2">
-                    <h4>自动化数据集构建</h4>
-                    <ul>
-                        <li>建立一套自动化流程，通过 <strong>VS Code</strong> 脚本桥接业界标准的 <strong>Blender Cycles</strong> 渲染器。</li>
-                        <li class="delay-1">根据场景配置文件（模型、材质、光照），批量生成高质量的PBR渲染图像，作为我们模型训练的“标准答案”。</li>
-                    </ul>
-                </div>
+            <div class="comparison-card animated fade-in-up delay-2">
+                <h3>vs. NeRF / 高斯溅射</h3>
+                <ul>
+                    <li><strong>目标:</strong> 创作 (我们的方案) vs. 复刻 (NeRF)。</li>
+                    <li><strong>输入:</strong> 3D模型 vs. 真实照片。</li>
+                    <li><strong>本质:</strong> <strong>渲染引擎</strong> vs. <strong>3D扫描仪</strong>。</li>
+                </ul>
             </div>
-        </section>
+        </div>
+    </section>
 
-        <!-- 幻灯片 7: 预期成果 -->
-        <section class="slide" id="slide-7">
-            <h2 class="animated fade-in-down">预期成果与研究意义</h2>
-            <div class="comparison-grid">
-                <div class="comparison-card animated fade-in-up delay-1">
-                    <h3>预期成果</h3>
-                    <ul>
-                        <li>一个性能优化的Transformer双阶段渲染模型，能处理<strong>更高复杂度</strong>的场景。</li>
-                        <li>渲染速度显著优于传统<strong>cycles渲染器</strong>，同时保持相近的图像质量。</li>
-                    </ul>
-                </div>
-                <div class="comparison-card animated fade-in-up delay-2">
-                    <h3>研究意义</h3>
-                    <ul>
-                        <li>推动通用神经渲染技术走向<strong>实用化</strong>，解决其关键性能瓶颈。</li>
-                        <li>为大规模神经网络在复杂3D图形学任务中的应用提供新的优化思路。</li>
-                    </ul>
-                </div>
+    <!-- 幻灯片 5: 现状与局限 -->
+    <section class="slide" id="slide-5">
+        <h2 class="animated fade-in-down">研究现状与局限性</h2>
+        <p class="animated fade-in-up delay-1">Transformer的注意力机制是核心瓶颈:</p>
+        <div class="impact-text animated fade-in-up delay-2">O(N²)</div>
+        <p class="animated fade-in-up delay-3">二次方复杂度导致其难以处理高面数的复杂场景，极大地限制了实用性。</p>
+    </section>
+
+    <!-- 幻灯片 6: 研究方案 (全新斜切布局) -->
+    <section class="slide" id="slide-6">
+        <h2 class="slide-title animated fade-in-down">我们的研究方案</h2>
+        <div class="dual-column-slanted-layout">
+            <div class="column-left animated fade-in-up delay-1">
+                <h4>模型性能优化</h4>
+                <ol>
+                    <li>利用Transformer-VQ的<strong>线性复杂度</strong>架构，通过向量量化将自注意力计算开销从O(N²)降至O(N)。</li>
+                    <li class="delay-1"><strong>码本注意力压缩：</strong> 使用固定码本聚类Key向量，将全局注意力转化为常量级查表运算。</li>
+                    <li class="delay-2"><strong>递归分解计算：</strong> 通过Δ<sup>⊤</sup>V矩阵分解实现因果注意力，显存消耗降低80%+。</li>
+                </ol>
             </div>
-        </section>
-
-        <!-- 幻灯片 8: 泛化性与风格化 -->
-        <section class="slide" id="slide-8">
-            <h2 class="animated fade-in-down" style="margin-top:5vh;">模型的泛化性与风格化潜力</h2>
-            <p class="animated fade-in-up delay-1" style="max-width: 900px; margin-bottom: -1vh; margin-left: 3vh;">
-                由于我们的模型是数据驱动的，其渲染风格并不局限于物理真实。通过使用不同的训练数据集，模型可以学习并生成高度风格化的效果，例如“三渲二”卡通渲染，为艺术创作提供无限可能。
-            </p>
-            <div class="comparison-grid two-item-grid">
-                <div class="comparison-card animated fade-in-up delay-2">
-                    <h3>照片级真实渲染</h3>
-                    <div class="image-placeholder">训练集: 真实PBR图像</div>
-                </div>
-                <div class="comparison-card animated fade-in-up delay-3">
-                    <h3>“三渲二”卡通风格</h3>
-                    <div class="image-placeholder">训练集: 卡通渲染图像</div>
-                </div>
+            <div class="column-right animated fade-in-up delay-2">
+                <h4>自动化数据集构建</h4>
+                <ul>
+                    <li>建立一套自动化流程，通过 <strong>VS Code</strong> 脚本桥接业界标准的 <strong>Blender Cycles</strong> 渲染器。</li>
+                    <li class="delay-1">根据场景配置文件（模型、材质、光照），批量生成高质量的PBR渲染图像，作为我们模型训练的“标准答案”。</li>
+                </ul>
             </div>
-        </section>
+        </div>
+    </section>
 
-        <!-- 幻灯片 9: 总结 -->
-        <section class="slide" id="slide-9">
-            <h2 class="animated fade-in-down">总结与展望</h2>
-            <p class="animated fade-in-up delay-1" style="max-width: 700px; margin: 0 auto 5vh auto;">
-                Transformer渲染管线开创了神经渲染的新方向。我们的工作旨在通过引入Transformer-VQ机制，解决其核心性能问题，期待能为实现真正的<strong>实时、高质量、通用</strong>的神经渲染器迈出坚实的一步。
-            </p>
-            <h1 class="animated fade-in-up delay-3" style="font-size: clamp(4rem, 8vw, 7rem); ">谢谢大家</h1>
-        </section>
+    <!-- 幻灯片 7: 预期成果 -->
+    <section class="slide" id="slide-7">
+        <h2 class="animated fade-in-down">预期成果与研究意义</h2>
+        <div class="comparison-grid">
+            <div class="comparison-card animated fade-in-up delay-1">
+                <h3>预期成果</h3>
+                <ul>
+                    <li>一个性能优化的Transformer双阶段渲染模型，能处理<strong>更高复杂度</strong>的场景。</li>
+                    <li>渲染速度显著优于传统<strong>cycles渲染器</strong>，同时保持相近的图像质量。</li>
+                </ul>
+            </div>
+            <div class="comparison-card animated fade-in-up delay-2">
+                <h3>研究意义</h3>
+                <ul>
+                    <li>推动通用神经渲染技术走向<strong>实用化</strong>，解决其关键性能瓶颈。</li>
+                    <li>为大规模神经网络在复杂3D图形学任务中的应用提供新的优化思路。</li>
+                </ul>
+            </div>
+        </div>
+    </section>
+
+    <!-- 幻灯片 8: 泛化性与风格化 -->
+    <section class="slide" id="slide-8">
+        <h2 class="animated fade-in-down" style="margin-top:5vh;">模型的泛化性与风格化潜力</h2>
+        <p class="animated fade-in-up delay-1" style="max-width: 900px; margin-bottom: -1vh; margin-left: 3vh;">
+            由于我们的模型是数据驱动的，其渲染风格并不局限于物理真实。通过使用不同的训练数据集，模型可以学习并生成高度风格化的效果，例如“三渲二”卡通渲染，为艺术创作提供无限可能。
+        </p>
+        <div class="comparison-grid two-item-grid">
+            <div class="comparison-card animated fade-in-up delay-2">
+                <h3>照片级真实渲染</h3>
+                <img src="title-6.png" class="image-placeholder">
+            </div>
+            <div class="comparison-card animated fade-in-up delay-3">
+                <h3>“三渲二”卡通风格</h3>
+                <img src="title-7.png" class="image-placeholder">
+            </div>
+        </div>
+    </section>
+
+    <!-- 幻灯片 9: 总结 -->
+    <section class="slide" id="slide-9">
+        <h2 class="animated fade-in-down">总结与展望</h2>
+        <p class="animated fade-in-up delay-1" style="max-width: 700px; margin: 0 auto 5vh auto;">
+            Transformer渲染管线开创了神经渲染的新方向。我们的工作旨在通过引入Transformer-VQ机制，解决其核心性能问题，期待能为实现真正的<strong>实时、高质量、通用</strong>的神经渲染器迈出坚实的一步。
+        </p>
+        <h1 class="animated fade-in-up delay-3" style="font-size: clamp(4rem, 8vw, 7rem); ">谢谢大家</h1>
+    </section>
     </div>
 
     <!-- 导航 -->
