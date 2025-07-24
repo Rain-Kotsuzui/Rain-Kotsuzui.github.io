@@ -1,0 +1,934 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>基于transformer的PBR渲染尝试</title>
+    <style>
+        /* --- 全局与字体 --- */
+        @import url('https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;700;900&display=swap');
+
+        :root {
+            --red: #FF0033;
+            --dark-red: #8B0000;
+            --white: #FFFFFF;
+            --black: #0A0A0A;
+            --grey: #cccccc;
+            --animation-speed: 0.7s;
+            --sub-animation-speed: 0.5s;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        html,
+        body {
+            height: 100%;
+            width: 100%;
+            overflow: hidden;
+            background-color: var(--black);
+            font-family: 'Poppins', 'Microsoft YaHei', sans-serif;
+            color: var(--white);
+        }
+
+        /* --- 动态网格背景 --- */
+        #grid-canvas {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 0;
+        }
+
+        /* --- PPT容器与幻灯片基础样式 --- */
+        .presentation {
+            position: relative;
+            width: 100%;
+            height: 100%;
+        }
+
+        .slide {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            padding: 5vh 8vw;
+            display: none;
+            /* 默认隐藏，由JS控制显示 */
+            flex-direction: column;
+            justify-content: center;
+        }
+
+        .slide.active {
+            display: flex;
+            /* 只有激活的幻灯片才显示 */
+            z-index: 2;
+        }
+
+        /********************************************/
+        /*       !!! 动画核心重构部分 !!!         */
+        /********************************************/
+
+        /* --- 1. 定义幻灯片进出动画关键帧 --- */
+        @keyframes slideInFromRight {
+            from {
+                transform: translateX(100%);
+            }
+
+            to {
+                transform: translateX(0);
+            }
+        }
+
+        @keyframes slideOutToLeft {
+            from {
+                transform: translateX(0);
+            }
+
+            to {
+                transform: translateX(-100%);
+            }
+        }
+
+        @keyframes slideInFromLeft {
+            from {
+                transform: translateX(-100%);
+            }
+
+            to {
+                transform: translateX(0);
+            }
+        }
+
+        @keyframes slideOutToRight {
+            from {
+                transform: translateX(0);
+            }
+
+            to {
+                transform: translateX(100%);
+            }
+        }
+
+        /* --- 2. 创建绑定幻灯片动画的CSS类 --- */
+        .slide.enter-from-right {
+            display: flex;
+            animation: slideInFromRight var(--animation-speed) forwards;
+        }
+
+        .slide.exit-to-left {
+            display: flex;
+            animation: slideOutToLeft var(--animation-speed) forwards;
+            z-index: 1;
+        }
+
+        .slide.enter-from-left {
+            display: flex;
+            animation: slideInFromLeft var(--animation-speed) forwards;
+        }
+
+        .slide.exit-to-right {
+            display: flex;
+            animation: slideOutToRight var(--animation-speed) forwards;
+            z-index: 1;
+        }
+
+        /* --- 3. 定义内部元素动画 --- */
+        @keyframes fadeInDown {
+            from {
+                opacity: 0;
+                transform: translateY(-30px);
+            }
+
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        @keyframes fadeInUp {
+            from {
+                opacity: 0;
+                transform: translateY(30px);
+            }
+
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .slide.active .animated {
+            opacity: 0;
+            animation-fill-mode: forwards !important;
+        }
+
+        .slide.active .fade-in-down {
+            animation: fadeInDown 0.6s;
+        }
+
+        .slide.active .fade-in-up {
+            animation: fadeInUp 0.6s;
+        }
+
+        /* 动画延迟 */
+        .slide.active .delay-1 {
+            animation-delay: 0.2s;
+        }
+
+        .slide.active .delay-2 {
+            animation-delay: 0.4s;
+        }
+
+        .slide.active .delay-3 {
+            animation-delay: 0.6s;
+        }
+
+        .slide.active .delay-4 {
+            animation-delay: 0.8s;
+        }
+
+        /********************************************/
+        /*   !!! 新增：幻灯片内部步骤动画 !!!   */
+        /********************************************/
+        @keyframes fadeOutUp {
+            from {
+                opacity: 1;
+                transform: translateY(0);
+            }
+
+            to {
+                opacity: 0;
+                transform: translateY(-20px);
+            }
+        }
+
+        @keyframes fadeInUpSub {
+            from {
+                opacity: 0;
+                transform: translateY(20px);
+            }
+
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .is-fading-out {
+            animation: fadeOutUp var(--sub-animation-speed) forwards;
+        }
+
+        .is-fading-in {
+            /* !important is needed to override display:none */
+            display: grid !important;
+            animation: fadeInUpSub var(--sub-animation-speed) forwards;
+        }
+
+        /* --- 通用元素样式 --- */
+        h1,
+        h2,
+        h3,
+        p,
+        ul,
+        ol,
+        h4 {
+            text-shadow: 0 0 10px rgba(0, 0, 0, 0.5);
+            position: relative;
+            z-index: 3;
+        }
+
+        h1 {
+            font-size: clamp(2.5rem, 20vw, 5rem);
+            font-weight: 900;
+            letter-spacing: -2px;
+            line-height: 1.1;
+        }
+
+        h2 {
+            font-size: clamp(1.5rem, 10vw, 4rem);
+            font-weight: 700;
+            margin-bottom: 2vh;
+            border-left: 5px solid var(--red);
+            padding-left: 20px;
+        }
+
+        h3 {
+            font-size: clamp(1rem, 5vw, 1.5rem);
+            font-weight: 400;
+            color: var(--grey);
+        }
+
+        h4 {
+            font-size: clamp(1.2rem, 6vw, 1.8rem);
+            font-weight: 700;
+            color: var(--white);
+            border-bottom: 3px solid var(--red);
+            padding-bottom: 10px;
+            margin-bottom: 25px;
+        }
+
+        p,
+        li {
+            font-size: clamp(0.9rem, 5vw, 1.3rem);
+            font-weight: 500;
+            line-height: 1.8;
+            max-width: 800px;
+        }
+
+        .comparison-card p {
+            font-size: clamp(1rem, 1.2vw, 1.3rem);
+            margin-bottom: 15px;
+            max-width: 100%;
+        }
+
+        ul,
+        ol {
+            list-style: none;
+            margin-top: 2vh;
+        }
+
+        strong {
+            font-weight: 700;
+            color: var(--red);
+        }
+
+        li {
+            padding-left: 2em;
+            position: relative;
+            margin-bottom: 1em;
+        }
+
+        li::before {
+            content: '■';
+            position: absolute;
+            left: 0;
+            color: var(--red);
+            font-size: 1.2em;
+            line-height: 1.4;
+        }
+
+        /* --- 导航 --- */
+        .nav-controls {
+            position: fixed;
+            bottom: 5vh;
+            right: 8vw;
+            z-index: 100;
+            display: flex;
+            gap: 15px;
+        }
+
+        .nav-btn {
+            background: rgba(255, 255, 255, 0.1);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            color: var(--white);
+            width: 50px;
+            height: 50px;
+            border-radius: 50%;
+            font-size: 24px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            backdrop-filter: blur(5px);
+        }
+
+        .nav-btn:hover {
+            background: var(--red);
+            transform: scale(1.1);
+            border-color: var(--red);
+        }
+
+        .slide-counter {
+            position: fixed;
+            bottom: 5vh;
+            left: 8vw;
+            z-index: 100;
+            font-size: 1rem;
+            background: rgba(0, 0, 0, 0.5);
+            padding: 5px 15px;
+            border-radius: 20px;
+            backdrop-filter: blur(5px);
+        }
+
+        /* --- 图片占位符样式 --- */
+
+
+
+        .image-placeholder {
+            width: 100%;
+            aspect-ratio: 16 / 9;
+            background: rgba(255, 255, 255, 0.05);
+            border: 2px dashed var(--grey);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            text-align: center;
+            color: var(--grey);
+            font-size: 1rem;
+            border-radius: 5px;
+            margin-top: 15px;
+            padding: 10px;
+            font-weight: 300;
+        }
+
+        .image-placeholder_1 {
+            width: 80%;
+            aspect-ratio: 16 / 5;
+            background: rgba(255, 255, 255, 0.05);
+            border: 2px dashed var(--grey);
+            display: flex;
+            justify-content: center;
+            align-items: center !important;
+            text-align: center;
+            color: var(--grey);
+            font-size: 1rem;
+            border-radius: 5px;
+            margin-top: 15px;
+            padding: 10px;
+            font-weight: 300;
+            margin: 0 auto;
+        }
+
+        .comparison-card .image-placeholder {
+            margin-top: auto;
+        }
+
+        /* --- 个性化页面样式 --- */
+        #slide-1 {
+            justify-content: center;
+            text-align: left;
+        }
+
+        #slide-1 .title-block {
+            position: relative;
+            display: inline-block;
+        }
+
+        #slide-1 .title-block::before {
+            content: '';
+            position: absolute;
+            top: -3.5vh;
+            left: -4vw;
+            width: 110%;
+            height: 150%;
+            background: linear-gradient(45deg, var(--red), var(--dark-red));
+            z-index: -1;
+            transform: skew(15deg);
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+        }
+
+        #slide-2 .slide-title {
+            text-align: center;
+            width: 100%;
+            border-left: none;
+            padding-left: 0;
+            margin-top: 5vh;
+        }
+
+        .pbr-grid-container {
+            position: relative;
+            width: 100%;
+            flex-grow: 1;
+        }
+
+        .pbr-grid-container .comparison-grid {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+        }
+
+        #pbr-part-2 {
+            display: none;
+            opacity: 0;
+        }
+
+        #slide-3 .two-col-layout {
+            display: grid;
+            grid-template-columns: 1fr 2fr;
+            gap: 5vw;
+            align-items: center;
+            width: 100%;
+
+        }
+
+        #slide-3 .col-left {
+            text-align: right;
+        }
+
+        #slide-3 .col-left h3 {
+            font-size: clamp(2rem, 4vw, 3.5rem);
+            color: var(--red);
+            line-height: 1.2;
+            font-weight: 700;
+        }
+
+        #slide-3 .col-left h3 span {
+            font-size: 1.2rem;
+            color: var(--grey);
+            font-weight: 300;
+            display: block;
+        }
+
+        #slide-3 .col-right h2 {
+            border: none;
+            padding-left: 0;
+        }
+
+        .comparison-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 2vw;
+            width: 100%;
+            margin-top: 4vh;
+        }
+
+        .two-item-grid {
+            grid-template-columns: repeat(2, 1fr);
+        }
+
+        .comparison-card {
+            background: rgba(20, 20, 20, 0.7);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(10px);
+            padding: 2vw;
+            border-radius: 10px;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .comparison-card h3 {
+            color: var(--red);
+            font-size: clamp(1.1rem, 1.6vw, 1.7rem);
+            border-bottom: 2px solid var(--red);
+            padding-bottom: 10px;
+            margin-bottom: 15px;
+            font-weight: 700;
+        }
+
+        .comparison-card li::before {
+            display: none;
+        }
+
+        .comparison-card li {
+            padding-left: 0;
+        }
+
+        #slide-5 {
+            text-align: center;
+            align-items: center;
+        }
+
+        #slide-5 .impact-text {
+            font-size: clamp(4rem, 10vw, 8rem);
+            font-weight: 900;
+            color: var(--red);
+            text-shadow: 0 0 20px var(--red), 0 0 40px var(--dark-red);
+            margin: 3vh 0;
+        }
+
+        #slide-5 p {
+            margin: 0 auto;
+            max-width: 600px;
+        }
+
+        /********************************************/
+        /*       !!! SLIDE 6 - 全新布局 !!!         */
+        /********************************************/
+        #slide-6 {
+            align-items: flex-start;
+            justify-content: flex-start;
+            /* Align content to the top */
+        }
+
+        #slide-6 .slide-title {
+            width: 100%;
+            border-left: none;
+            padding-left: 0;
+            margin-top: 6vh;
+            margin-bottom: 4vh;
+            margin-left: -5vh;
+        }
+
+        #slide-6::after {
+            content: '';
+            position: absolute;
+            right: -10vw;
+            top: 0;
+            width: 45vw;
+            height: 100%;
+            background: linear-gradient(45deg, var(--dark-red), rgba(10, 10, 10, 0.8));
+            transform: skewX(15deg);
+            z-index: 1;
+        }
+
+        .dual-column-slanted-layout {
+            /* Changed from grid to block for vertical stacking */
+            display: block;
+            width: 100%;
+            position: relative;
+            z-index: 2;
+        }
+
+        .dual-column-slanted-layout .column-left {
+            /* Set width and bottom margin for the top block */
+            width: 60%;
+            margin-bottom: 2vh;
+        }
+
+        .dual-column-slanted-layout .column-right {
+            /* Reset transform, push to the right for a staggered effect */
+            transform: none;
+            margin-left: 4rem;
+            width: 60%;
+        }
+
+        #slide-6 ol {
+            list-style: none;
+            counter-reset: solution-counter;
+            margin-top: 0;
+        }
+
+        #slide-6 li {
+            padding-left: 4rem;
+            min-height: 4rem;
+            margin-bottom: 0.5rem;
+        }
+
+        #slide-6 .column-left li::before {
+            counter-increment: solution-counter;
+            content: "0" counter(solution-counter);
+            font-size: 3rem;
+            font-weight: 900;
+            color: rgba(255, 255, 255, 0.2);
+            line-height: 1;
+            transform: translateY(-20%);
+        }
+
+        #slide-6 .column-right ul {
+            margin-top: 0;
+        }
+
+        #slide-6 .column-right li {
+            padding-left: 2em;
+        }
+
+        #slide-6 .column-right li::before {
+            content: '■';
+            font-size: 1.2em;
+            line-height: 1.4;
+        }
+
+
+        #slide-9 {
+            text-align: center;
+            align-items: center;
+        }
+    </style>
+</head>
+
+<body>
+
+    <canvas id="grid-canvas"></canvas>
+    <div class="presentation">
+        <!-- 幻灯片 1: 标题页 -->
+        <section class="slide" id="slide-1">
+            <div class="title-block">
+                <h3 class="animated fade-in-down">可嵌入传统图形渲染管线的</h3>
+                <h1 class="animated fade-in-down delay-1">基于Transformer的快速PBR渲染方案</h1>
+            </div>
+            <h3 class="animated fade-in-up delay-2" style="margin-top: 5vh;">报告人：雨伞鱼</h3>
+        </section>
+
+        <!-- 幻灯片 2: PBR算力黑洞 -->
+        <section class="slide" id="slide-2" data-sub-steps="2">
+            <h2 class="slide-title animated fade-in-down">PBR渲染的算力“黑洞”</h2>
+            <div class="pbr-grid-container">
+                <div id="pbr-part-1" class="comparison-grid two-item-grid animated fade-in-up">
+                    <div class="comparison-card">
+                        <h3>初始计算：亿级光线</h3>
+                        <p>一张1K图像有超 <strong>100万</strong> 像素。为消除噪点，每个像素需采样 <strong>100+</strong> 次，这意味着初始就有超
+                            <strong>1亿</strong> 条光线要追踪。
+                        </p>
+                        <img src="title-1.png" class="image-placeholder">
+                    </div>
+
+                    <div class="comparison-card">
+                        <h3>光线弹射：指数爆炸</h3>
+                        <p>每条光线在场景中平均弹射 <strong>8-16</strong> 次才能找到光源，每次弹射都要和所有物体求交。总计算量轻松突破 <strong>数十亿</strong>。</p>
+                        <img src="title-2.png" class="image-placeholder">
+                    </div>
+                </div>
+
+                <div id="pbr-part-2" class="comparison-grid two-item-grid">
+                    <div class="comparison-card">
+                        <h3>硬件瓶颈：分钟级等待</h3>
+                        <p>即便在顶级的RTX 4090上，渲染一张包含复杂材质的“简单”场景，耗时也以 <strong>分钟</strong> 计算，无法用于实时交互。</p>
+                        <img src="title-3.png" class="image-placeholder">
+                    </div>
+                    <div class="comparison-card">
+                        <h3>电影级代价：天级渲染</h3>
+                        <p>当涉及皮肤（次表面散射）、烟雾（体渲染）等效果，单帧画面在专业渲染农场耗费 <strong>数小时</strong> 甚至 <strong>数天</strong> 都是常态。</p>
+                        <img src="title-4.png" class="image-placeholder">
+                    </div>
+                </div>
+            </div>
+    </div>
+    </section>
+    <!-- 幻灯片 3: 核心技术 -->
+    <section class="slide" id="slide-3">
+        <div class="two-col-layout">
+            <div class="col-left animated fade-in-down">
+                <h3>序列到序列<span>的核心思想</span></h3>
+            </div>
+            <div class="col-right">
+                <h2 class="animated fade-in-down delay-1">核心技术解读:</h2>
+                <ul class="animated fade-in-up delay-2">
+                    <li><strong>两阶段架构:</strong> 视图无关的光照计算 + 视图相关的成像渲染。</li>
+                    <li class="delay-1"><strong>关键创新:</strong>
+                        采用<strong>3D相对位置编码</strong>，使Transformer能够理解三维空间中的几何关系。</li>
+                </ul>
+            </div>
+        </div>
+        <!-- === 代码开始：在此处添加图片占位符 === -->
+        <img src="title.png" class="image-placeholder_1 animated fade-in-up delay-3">
+        <!-- === 代码结束 === -->
+    </section>
+
+    <!-- 幻灯片 4: 对比分析 -->
+    <section class="slide" id="slide-4">
+        <h2 class="animated fade-in-down">对比分析：神经渲染的定位</h2>
+        <div class="comparison-grid">
+            <div class="comparison-card animated fade-in-up delay-1">
+                <h3>vs. 路径追踪</h3>
+                <ul>
+                    <li><strong>改进:</strong> 速度快百倍、输出无噪点、天然可微。</li>
+                    <li><strong>代价:</strong> 泛化能力受限于训练数据。</li>
+                </ul>
+            </div>
+            <div class="comparison-card animated fade-in-up delay-2">
+                <h3>vs. NeRF / 高斯溅射</h3>
+                <ul>
+                    <li><strong>目标:</strong> 创作 (我们的方案) vs. 复刻 (NeRF)。</li>
+                    <li><strong>输入:</strong> 3D模型 vs. 真实照片。</li>
+                    <li><strong>本质:</strong> <strong>渲染引擎</strong> vs. <strong>3D扫描仪</strong>。</li>
+                </ul>
+            </div>
+        </div>
+    </section>
+
+    <!-- 幻灯片 5: 现状与局限 -->
+    <section class="slide" id="slide-5">
+        <h2 class="animated fade-in-down">研究现状与局限性</h2>
+        <p class="animated fade-in-up delay-1">Transformer的注意力机制是核心瓶颈:</p>
+        <div class="impact-text animated fade-in-up delay-2">O(N²)</div>
+        <p class="animated fade-in-up delay-3">二次方复杂度导致其难以处理高面数的复杂场景，极大地限制了实用性。</p>
+    </section>
+
+    <!-- 幻灯片 6: 研究方案 (全新斜切布局) -->
+    <section class="slide" id="slide-6">
+        <h2 class="slide-title animated fade-in-down">我们的研究方案</h2>
+        <div class="dual-column-slanted-layout">
+            <div class="column-left animated fade-in-up delay-1">
+                <h4>模型性能优化</h4>
+                <ol>
+                    <li>利用Transformer-VQ的<strong>线性复杂度</strong>架构，通过向量量化将自注意力计算开销从O(N²)降至O(N)。</li>
+                    <li class="delay-1"><strong>码本注意力压缩：</strong> 使用固定码本聚类Key向量，将全局注意力转化为常量级查表运算。</li>
+                    <li class="delay-2"><strong>递归分解计算：</strong> 通过Δ<sup>⊤</sup>V矩阵分解实现因果注意力，显存消耗降低80%+。</li>
+                </ol>
+            </div>
+            <div class="column-right animated fade-in-up delay-2">
+                <h4>自动化数据集构建</h4>
+                <ul>
+                    <li>建立一套自动化流程，通过 <strong>VS Code</strong> 脚本桥接业界标准的 <strong>Blender Cycles</strong> 渲染器。</li>
+                    <li class="delay-1">根据场景配置文件（模型、材质、光照），批量生成高质量的PBR渲染图像，作为我们模型训练的“标准答案”。</li>
+                </ul>
+            </div>
+        </div>
+    </section>
+
+    <!-- 幻灯片 7: 预期成果 -->
+    <section class="slide" id="slide-7">
+        <h2 class="animated fade-in-down">预期成果与研究意义</h2>
+        <div class="comparison-grid">
+            <div class="comparison-card animated fade-in-up delay-1">
+                <h3>预期成果</h3>
+                <ul>
+                    <li>一个性能优化的Transformer双阶段渲染模型，能处理<strong>更高复杂度</strong>的场景。</li>
+                    <li>渲染速度显著优于传统<strong>cycles渲染器</strong>，同时保持相近的图像质量。</li>
+                </ul>
+            </div>
+            <div class="comparison-card animated fade-in-up delay-2">
+                <h3>研究意义</h3>
+                <ul>
+                    <li>推动通用神经渲染技术走向<strong>实用化</strong>，解决其关键性能瓶颈。</li>
+                    <li>为大规模神经网络在复杂3D图形学任务中的应用提供新的优化思路。</li>
+                </ul>
+            </div>
+        </div>
+    </section>
+
+    <!-- 幻灯片 8: 泛化性与风格化 -->
+    <section class="slide" id="slide-8">
+        <h2 class="animated fade-in-down" style="margin-top:5vh;">模型的泛化性与风格化潜力</h2>
+        <p class="animated fade-in-up delay-1" style="max-width: 900px; margin-bottom: -1vh; margin-left: 3vh;">
+            由于我们的模型是数据驱动的，其渲染风格并不局限于物理真实。通过使用不同的训练数据集，模型可以学习并生成高度风格化的效果，例如“三渲二”卡通渲染，为艺术创作提供无限可能。
+        </p>
+        <div class="comparison-grid two-item-grid">
+            <div class="comparison-card animated fade-in-up delay-2">
+                <h3>照片级真实渲染</h3>
+                <img src="title-6.png" class="image-placeholder">
+            </div>
+            <div class="comparison-card animated fade-in-up delay-3">
+                <h3>“三渲二”卡通风格</h3>
+                <img src="title-7.png" class="image-placeholder">
+            </div>
+        </div>
+    </section>
+
+    <!-- 幻灯片 9: 总结 -->
+    <section class="slide" id="slide-9">
+        <h2 class="animated fade-in-down">总结与展望</h2>
+        <p class="animated fade-in-up delay-1" style="max-width: 700px; margin: 0 auto 5vh auto;">
+            Transformer渲染管线开创了神经渲染的新方向。我们的工作旨在通过引入Transformer-VQ机制，解决其核心性能问题，期待能为实现真正的<strong>实时、高质量、通用</strong>的神经渲染器迈出坚实的一步。
+        </p>
+        <h1 class="animated fade-in-up delay-3" style="font-size: clamp(4rem, 8vw, 7rem); ">谢谢大家</h1>
+    </section>
+    </div>
+
+    <!-- 导航 -->
+    <div class="nav-controls">
+        <button id="prev-btn" class="nav-btn">←</button>
+        <button id="next-btn" class="nav-btn">→</button>
+    </div>
+    <div id="slide-counter" class="slide-counter">1 / 9</div>
+
+    <script>
+        // --- 动态网格 ---
+        const canvas = document.getElementById('grid-canvas');
+        const ctx = canvas.getContext('2d');
+        let width, height, gridSize, offsetX, offsetY;
+        function setupGrid() { width = canvas.width = window.innerWidth; height = canvas.height = window.innerHeight; gridSize = 40; offsetX = 0; offsetY = 0; }
+        function drawGrid() { if (!ctx) return; ctx.clearRect(0, 0, width, height); ctx.strokeStyle = 'rgba(255, 0, 51,  0.15)'; ctx.lineWidth = 1; for (let x = -gridSize + (offsetX % gridSize); x < width; x += gridSize) { ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, height); ctx.stroke(); } for (let y = -gridSize + (offsetY % gridSize); y < height; y += gridSize) { ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(width, y); ctx.stroke(); } offsetX += 0.2; offsetY += 0.2; requestAnimationFrame(drawGrid); }
+        window.addEventListener('resize', setupGrid); setupGrid(); drawGrid();
+
+        /********************************************/
+        /*       !!! 动画核心重构部分 !!!         */
+        /********************************************/
+        const slides = document.querySelectorAll('.slide');
+        const prevBtn = document.getElementById('prev-btn');
+        const nextBtn = document.getElementById('next-btn');
+        const slideCounter = document.getElementById('slide-counter');
+        let currentSlide = 0;
+        let isNavigating = false;
+        const animationDuration = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--animation-speed')) * 1000;
+
+        // 新增：内部步骤状态
+        let currentSubStep = 0;
+
+        // 核心幻灯片切换函数
+        function goToSlide(newIndex, direction) {
+            if (isNavigating || newIndex < 0 || newIndex >= slides.length || newIndex === currentSlide) {
+                return;
+            }
+            isNavigating = true;
+            currentSubStep = 0; // 重置子步骤
+
+            const oldSlide = slides[currentSlide];
+            const newSlide = slides[newIndex];
+
+            if (direction === 'next') {
+                oldSlide.classList.add('exit-to-left');
+                newSlide.classList.add('enter-from-right');
+            } else {
+                oldSlide.classList.add('exit-to-right');
+                newSlide.classList.add('enter-from-left');
+            }
+
+            newSlide.classList.add('active');
+            currentSlide = newIndex;
+            updateCounter();
+
+            setTimeout(() => {
+                oldSlide.classList.remove('active', 'exit-to-left', 'exit-to-right');
+                newSlide.classList.remove('enter-from-right', 'enter-from-left');
+                isNavigating = false;
+            }, animationDuration);
+        }
+
+        // 处理内部步骤动画
+        function handleSubStep(slideIndex, subStepIndex) {
+            const slide = slides[slideIndex];
+            const part1 = slide.querySelector('#pbr-part-1');
+            const part2 = slide.querySelector('#pbr-part-2');
+
+            if (!part1 || !part2) return;
+
+            // 移除所有动画类以重置
+            part1.classList.remove('is-fading-in', 'is-fading-out');
+            part2.classList.remove('is-fading-in', 'is-fading-out');
+
+            if (subStepIndex === 0) { // 回到第一步
+                part2.classList.add('is-fading-out');
+                part1.classList.add('is-fading-in');
+            } else { // 前往第二步
+                part1.classList.add('is-fading-out');
+                part2.classList.add('is-fading-in');
+            }
+        }
+
+        // 新的统一导航函数
+        function navigate(direction) {
+            if (isNavigating) return;
+
+            const slide = slides[currentSlide];
+            const totalSubSteps = parseInt(slide.dataset.subSteps) || 1;
+
+            if (direction === 'next') {
+                if (currentSubStep < totalSubSteps - 1) {
+                    currentSubStep++;
+                    handleSubStep(currentSlide, currentSubStep);
+                } else {
+                    goToSlide(currentSlide + 1, 'next');
+                }
+            } else if (direction === 'prev') {
+                if (currentSubStep > 0) {
+                    currentSubStep--;
+                    handleSubStep(currentSlide, currentSubStep);
+                } else {
+                    goToSlide(currentSlide - 1, 'prev');
+                }
+            }
+        }
+
+        function updateCounter() {
+            slideCounter.textContent = `${currentSlide + 1} / ${slides.length}`;
+        }
+
+        // 事件监听
+        nextBtn.addEventListener('click', () => navigate('next'));
+        prevBtn.addEventListener('click', () => navigate('prev'));
+
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'ArrowRight' || e.key === ' ') {
+                e.preventDefault();
+                navigate('next');
+            } else if (e.key === 'ArrowLeft') {
+                e.preventDefault();
+                navigate('prev');
+            }
+        });
+
+        // 初始化
+        slides[0].classList.add('active');
+        updateCounter();
+
+    </script>
+</body>
+
+</html>

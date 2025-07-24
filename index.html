@@ -4,930 +4,1357 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>基于transformer的PBR渲染尝试</title>
-    <style>
-        /* --- 全局与字体 --- */
-        @import url('https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;700;900&display=swap');
+    <title>动态演示 | 基于Transformer的快速PBR渲染方案</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link
+        href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;600;800;900&family=Bai+Jamjuree:wght@600&display=swap"
+        rel="stylesheet">
 
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.11.4/gsap.min.js"></script>
+
+    <style>
         :root {
-            --red: #FF0033;
-            --dark-red: #8B0000;
-            --white: #FFFFFF;
-            --black: #0A0A0A;
-            --grey: #cccccc;
-            --animation-speed: 0.7s;
-            --sub-animation-speed: 0.5s;
+            --main-red: #FF3B30;
+            --background-light: #F9F9F9;
+            --text-dark: #121212;
+            --text-muted: #888;
+            --grid-color: rgba(0, 0, 0, 0.05);
         }
 
+        /* Base & Reset */
         * {
             margin: 0;
             padding: 0;
             box-sizing: border-box;
         }
 
-        html,
         body {
-            height: 100%;
-            width: 100%;
+            font-family: 'Poppins', sans-serif;
+            background-color: var(--background-light);
+            color: var(--text-dark);
             overflow: hidden;
-            background-color: var(--black);
-            font-family: 'Poppins', 'Microsoft YaHei', sans-serif;
-            color: var(--white);
+            height: 100vh;
         }
 
-        /* --- 动态网格背景 --- */
-        #grid-canvas {
+        /* 请用下面的代码替换掉您文件中已有的 .background-grid 样式 */
+
+        .background-grid {
             position: fixed;
             top: 0;
             left: 0;
             width: 100%;
             height: 100%;
-            z-index: 0;
+            /* MODIFIED: 线条从 1px 加粗到 2px */
+            background-image:
+                linear-gradient(var(--grid-color) 5px, transparent 2px),
+                linear-gradient(90deg, var(--grid-color) 5px, transparent 2px);
+            background-size: 50px 50px;
+            z-index: -1;
+            opacity: 0.5;
+            /* NEW: 加入 subtle 的动画效果 */
+            animation: moveGrid 40s linear infinite;
         }
 
-        /* --- PPT容器与幻灯片基础样式 --- */
-        .presentation {
+        .ppt-container {
             position: relative;
-            width: 100%;
-            height: 100%;
+            width: 100vw;
+            height: 100vh;
         }
 
         .slide {
             position: absolute;
-            top: 0;
-            left: 0;
             width: 100%;
             height: 100%;
-            padding: 5vh 8vw;
-            display: none;
-            /* 默认隐藏，由JS控制显示 */
-            flex-direction: column;
-            justify-content: center;
-        }
-
-        .slide.active {
             display: flex;
-            /* 只有激活的幻灯片才显示 */
-            z-index: 2;
+            overflow: hidden;
+            visibility: hidden;
         }
 
-        /********************************************/
-        /*       !!! 动画核心重构部分 !!!         */
-        /********************************************/
-
-        /* --- 1. 定义幻灯片进出动画关键帧 --- */
-        @keyframes slideInFromRight {
-            from {
-                transform: translateX(100%);
-            }
-
-            to {
-                transform: translateX(0);
-            }
-        }
-
-        @keyframes slideOutToLeft {
-            from {
-                transform: translateX(0);
-            }
-
-            to {
-                transform: translateX(-100%);
-            }
-        }
-
-        @keyframes slideInFromLeft {
-            from {
-                transform: translateX(-100%);
-            }
-
-            to {
-                transform: translateX(0);
-            }
-        }
-
-        @keyframes slideOutToRight {
-            from {
-                transform: translateX(0);
-            }
-
-            to {
-                transform: translateX(100%);
-            }
-        }
-
-        /* --- 2. 创建绑定幻灯片动画的CSS类 --- */
-        .slide.enter-from-right {
-            display: flex;
-            animation: slideInFromRight var(--animation-speed) forwards;
-        }
-
-        .slide.exit-to-left {
-            display: flex;
-            animation: slideOutToLeft var(--animation-speed) forwards;
-            z-index: 1;
-        }
-
-        .slide.enter-from-left {
-            display: flex;
-            animation: slideInFromLeft var(--animation-speed) forwards;
-        }
-
-        .slide.exit-to-right {
-            display: flex;
-            animation: slideOutToRight var(--animation-speed) forwards;
-            z-index: 1;
-        }
-
-        /* --- 3. 定义内部元素动画 --- */
-        @keyframes fadeInDown {
-            from {
-                opacity: 0;
-                transform: translateY(-30px);
-            }
-
-            to {
-                opacity: 1;
-                transform: translateY(0);
-            }
-        }
-
-        @keyframes fadeInUp {
-            from {
-                opacity: 0;
-                transform: translateY(30px);
-            }
-
-            to {
-                opacity: 1;
-                transform: translateY(0);
-            }
-        }
-
-        .slide.active .animated {
-            opacity: 0;
-            animation-fill-mode: forwards !important;
-        }
-
-        .slide.active .fade-in-down {
-            animation: fadeInDown 0.6s;
-        }
-
-        .slide.active .fade-in-up {
-            animation: fadeInUp 0.6s;
-        }
-
-        /* 动画延迟 */
-        .slide.active .delay-1 {
-            animation-delay: 0.2s;
-        }
-
-        .slide.active .delay-2 {
-            animation-delay: 0.4s;
-        }
-
-        .slide.active .delay-3 {
-            animation-delay: 0.6s;
-        }
-
-        .slide.active .delay-4 {
-            animation-delay: 0.8s;
-        }
-
-        /********************************************/
-        /*   !!! 新增：幻灯片内部步骤动画 !!!   */
-        /********************************************/
-        @keyframes fadeOutUp {
-            from {
-                opacity: 1;
-                transform: translateY(0);
-            }
-
-            to {
-                opacity: 0;
-                transform: translateY(-20px);
-            }
-        }
-
-        @keyframes fadeInUpSub {
-            from {
-                opacity: 0;
-                transform: translateY(20px);
-            }
-
-            to {
-                opacity: 1;
-                transform: translateY(0);
-            }
-        }
-
-        .is-fading-out {
-            animation: fadeOutUp var(--sub-animation-speed) forwards;
-        }
-
-        .is-fading-in {
-            /* !important is needed to override display:none */
-            display: grid !important;
-            animation: fadeInUpSub var(--sub-animation-speed) forwards;
-        }
-
-        /* --- 通用元素样式 --- */
-        h1,
-        h2,
-        h3,
-        p,
-        ul,
-        ol,
-        h4 {
-            text-shadow: 0 0 10px rgba(0, 0, 0, 0.5);
-            position: relative;
-            z-index: 3;
-        }
-
-        h1 {
-            font-size: clamp(2.5rem, 20vw, 5rem);
-            font-weight: 900;
-            letter-spacing: -2px;
-            line-height: 1.1;
-        }
-
-        h2 {
-            font-size: clamp(1.5rem, 10vw, 4rem);
-            font-weight: 700;
-            margin-bottom: 2vh;
-            border-left: 5px solid var(--red);
-            padding-left: 20px;
-        }
-
-        h3 {
-            font-size: clamp(1rem, 5vw, 1.5rem);
-            font-weight: 400;
-            color: var(--grey);
-        }
-
-        h4 {
-            font-size: clamp(1.2rem, 6vw, 1.8rem);
-            font-weight: 700;
-            color: var(--white);
-            border-bottom: 3px solid var(--red);
-            padding-bottom: 10px;
-            margin-bottom: 25px;
-        }
-
-        p,
-        li {
-            font-size: clamp(0.9rem, 5vw, 1.3rem);
-            font-weight: 500;
-            line-height: 1.8;
-            max-width: 800px;
-        }
-
-        .comparison-card p {
-            font-size: clamp(1rem, 1.2vw, 1.3rem);
-            margin-bottom: 15px;
-            max-width: 100%;
-        }
-
-        ul,
-        ol {
-            list-style: none;
-            margin-top: 2vh;
-        }
-
-        strong {
-            font-weight: 700;
-            color: var(--red);
-        }
-
-        li {
-            padding-left: 2em;
-            position: relative;
-            margin-bottom: 1em;
-        }
-
-        li::before {
-            content: '■';
-            position: absolute;
-            left: 0;
-            color: var(--red);
-            font-size: 1.2em;
-            line-height: 1.4;
-        }
-
-        /* --- 导航 --- */
-        .nav-controls {
+        .page-number {
             position: fixed;
-            bottom: 5vh;
-            right: 8vw;
+            bottom: 40px;
+            left: 40px;
+            font-family: 'Bai Jamjuree', sans-serif;
+            font-size: 1.2rem;
+            font-weight: 600;
+            color: var(--text-muted);
             z-index: 100;
+        }
+
+        .navigation {
+            position: fixed;
+            bottom: 30px;
+            right: 30px;
             display: flex;
-            gap: 15px;
+            align-items: center;
+            z-index: 100;
         }
 
         .nav-btn {
-            background: rgba(255, 255, 255, 0.1);
-            border: 1px solid rgba(255, 255, 255, 0.2);
-            color: var(--white);
+            background: #fff;
+            border: 1px solid #eee;
+            color: var(--text-dark);
+            font-size: 1.5rem;
             width: 50px;
             height: 50px;
             border-radius: 50%;
-            font-size: 24px;
             cursor: pointer;
-            transition: all 0.3s ease;
-            backdrop-filter: blur(5px);
+            transition: all 0.3s;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.05);
         }
 
         .nav-btn:hover {
-            background: var(--red);
+            background: var(--main-red);
+            color: white;
             transform: scale(1.1);
-            border-color: var(--red);
         }
 
-        .slide-counter {
-            position: fixed;
-            bottom: 5vh;
-            left: 8vw;
-            z-index: 100;
-            font-size: 1rem;
-            background: rgba(0, 0, 0, 0.5);
-            padding: 5px 15px;
-            border-radius: 20px;
-            backdrop-filter: blur(5px);
+        .nav-btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
         }
-
-        /* --- 图片占位符样式 --- */
-
-
 
         .image-placeholder {
             width: 100%;
-            aspect-ratio: 16 / 9;
-            background: rgba(255, 255, 255, 0.05);
-            border: 2px dashed var(--grey);
+            height: 100%;
+            background: #EAEAEA;
             display: flex;
             justify-content: center;
             align-items: center;
-            text-align: center;
-            color: var(--grey);
-            font-size: 1rem;
-            border-radius: 5px;
-            margin-top: 15px;
-            padding: 10px;
-            font-weight: 300;
+            flex-direction: column;
+            border-radius: 8px;
+            overflow: hidden;
+            border: 2px dashed #ccc;
         }
 
-        .image-placeholder_1 {
-            width: 80%;
-            aspect-ratio: 16 / 5;
-            background: rgba(255, 255, 255, 0.05);
-            border: 2px dashed var(--grey);
+        .image-placeholder svg {
+            width: 50px;
+            height: 50px;
+            opacity: 0.5;
+            color: var(--text-muted);
+        }
+
+        .image-placeholder span {
+            margin-top: 1rem;
+            font-size: 1rem;
+            font-weight: 600;
+            color: var(--text-muted);
+        }
+
+        .highlight {
+            color: var(--main-red);
+            font-weight: 600;
+        }
+
+        /* Slide 1: Title */
+        .s1-container {
+            padding: 8vw;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            width: 100%;
+        }
+
+        .s1-title .line {
+            overflow: hidden;
+        }
+
+        .s1-title h2 {
+            font-size: 2.5rem;
+            /* 比h1小一些 */
+            font-weight: 400;
+            /* 不用那么粗 */
+            color: var(--text-dark);
+            line-height: 1.3;
+            transform: translateY(100%);
+            /* 和h1一样的初始状态 */
+
+            text-shadow: 2px 2px 8px rgba(0, 0, 0, 0.5);
+        }
+
+        .s1-title h1 {
+            font-size: 4.5rem;
+            font-weight: 900;
+            line-height: 1.2;
+            transform: translateY(100%);
+
+            text-shadow: 2px 2px 8px rgba(0, 0, 0, 0.5);
+        }
+
+        .s1-subtitle {
+            font-size: 1.5rem;
+            color: var(--text-muted);
+            margin-top: 2rem;
+            overflow: hidden;
+        }
+
+        .s1-subtitle p {
+            transform: translateY(100%);
+        }
+
+        .s1-details {
+            margin-top: 5rem;
+            color: var(--text-muted);
+        }
+
+        .s1-red-block {
+            position: absolute;
+            top: 0;
+            right: 0;
+            width: 60%;
+            height: 100%;
+            background: var(--main-red);
+            transform: skewX(-15deg) translateX(50px);
+            transform-origin: bottom;
+        }
+
+        /* Slide 2: Split Screen */
+        .s2-red-side {
+            flex-basis: 45%;
+            background-color: var(--main-red);
             display: flex;
             justify-content: center;
-            align-items: center !important;
-            text-align: center;
-            color: var(--grey);
-            font-size: 1rem;
-            border-radius: 5px;
-            margin-top: 15px;
-            padding: 10px;
-            font-weight: 300;
-            margin: 0 auto;
+            align-items: center;
+            padding: 5%;
         }
 
-        .comparison-card .image-placeholder {
-            margin-top: auto;
-        }
-
-        /* --- 个性化页面样式 --- */
-        #slide-1 {
+        .s2-white-side {
+            flex-basis: 55%;
+            padding: 6vw;
+            /* NEW: Add these properties for vertical centering */
+            display: flex;
+            flex-direction: column;
             justify-content: center;
-            text-align: left;
         }
 
-        #slide-1 .title-block {
+        .s2-white-side h1 {
+            font-size: 3rem;
+            margin-bottom: 2rem;
+        }
+
+        .s2-white-side ul {
+            list-style: none;
+        }
+
+        .s2-white-side li {
+            margin-bottom: 1.5rem;
+            font-size: 1.2rem;
+            line-height: 1.6;
+        }
+
+        /* Slide 3: Overlapping Layout */
+        /* Slide 3: Vertical Architecture Layout (NEW GRAY THEME) */
+        .s3-new-container {
+            width: 100%;
+            height: 100%;
+            display: flex;
+            background-color: transparent;
+        }
+
+        .s3-image-panel {
+            flex-basis: 55%;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 4vw;
+        }
+
+        .s3-text-panel {
+            flex-basis: 45%;
+            /* MODIFIED: Changed background to a dark gray */
+            background-color: #2c2c2e;
+            /* A modern, dark gray color */
+            color: #f2f2f7;
+            /* A slightly off-white for better readability */
+            padding: 6vw;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+        }
+
+        .s3-text-panel h1 {
+            font-size: 3.5rem;
+            margin-bottom: 2.5rem;
+            /* MODIFIED: Use red as the highlight color for the title */
+            color: var(--main-red);
+        }
+
+        .s3-text-panel ul {
+            list-style: none;
+        }
+
+        .s3-text-panel li {
+            font-size: 1.4rem;
+            line-height: 1.9;
+            margin-bottom: 2rem;
             position: relative;
-            display: inline-block;
+            padding-left: 25px;
         }
 
-        #slide-1 .title-block::before {
+        .s3-text-panel li::before {
             content: '';
             position: absolute;
-            top: -3.5vh;
-            left: -4vw;
-            width: 110%;
-            height: 150%;
-            background: linear-gradient(45deg, var(--red), var(--dark-red));
-            z-index: -1;
-            transform: skew(15deg);
-            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+            left: 0;
+            top: 8px;
+            width: 5px;
+            height: 70%;
+            /* MODIFIED: The vertical line is now red for emphasis */
+            background-color: var(--main-red);
+            border-radius: 5px;
         }
 
-        #slide-2 .slide-title {
-            text-align: center;
+        .s3-text-panel strong {
+            /* MODIFIED: Keywords are now highlighted in red */
+            color: var(--main-red);
+            font-weight: 600;
+            /* Adjusted for better harmony */
+        }
+
+        /* Slide 4 & 5 (Hybrid Layout) */
+        .tech-detail-slide {
             width: 100%;
-            border-left: none;
-            padding-left: 0;
-            margin-top: 5vh;
+            height: 100%;
+            padding: 8vw;
+            display: flex;
+            align-items: center;
+            gap: 5vw;
         }
 
-        .pbr-grid-container {
+        .tech-detail-slide .text-content {
+            flex: 0 0 40%;
+        }
+
+        .tech-detail-slide .text-content .eyebrow {
+            font-size: 3rem;
+            font-weight: 1000;
+            color: var(--main-red);
+            letter-spacing: 2px;
+            text-transform: uppercase;
+            margin-bottom: 0.5rem;
+        }
+
+        .tech-detail-slide .text-content h1 {
+            font-size: 3.5rem;
+            font-weight: 1000;
+            margin-bottom: 2rem;
+
+            text-shadow: 2px 2px 8px rgba(0, 0, 0, 0.5);
+        }
+
+        .tech-detail-slide .text-content p {
+            font-size: 1.2rem;
+            line-height: 1.8;
+            color: var(--text-muted);
+        }
+
+        .tech-detail-slide .diagram-content {
+            flex: 1;
             position: relative;
-            width: 100%;
-            flex-grow: 1;
+            height: 75vh;
         }
 
-        .pbr-grid-container .comparison-grid {
+        .tech-detail-slide .main-diagram {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 70%;
+            height: 70%;
+        }
+
+        .tech-detail-slide .diagram-box {
+            position: absolute;
+            background: white;
+            border: 1px solid #eee;
+            border-radius: 8px;
+            padding: 1.2rem;
+            box-shadow: 0 10px 20px rgba(0, 0, 0, 0.05);
+            text-align: center;
+        }
+
+        .tech-detail-slide .diagram-box h3 {
+            font-size: 1rem;
+            margin-bottom: 0.5rem;
+        }
+
+        .tech-detail-slide .diagram-box p {
+            font-size: 0.8rem;
+            color: var(--text-muted);
+            line-height: 1.3;
+        }
+
+        /* Slide 6: Focus Cards Layout */
+
+        .s6-container {
+            width: 100%;
+            height: 100%;
+            background-color: #A31E17;
+            /* The final solid color background */
+            display: flex;
+            /* Changed from flex to grid for easier layering */
+            place-items: center;
+            gap: 4vw;
+            padding: 8vw;
+            position: relative;
+            /* Essential for the overlay */
+            overflow: hidden;
+            /* Good practice */
+        }
+
+        /* NEW: The gradient overlay div style */
+        .gradient-overlay {
             position: absolute;
             top: 0;
             left: 0;
             width: 100%;
+            height: 100%;
+            background: radial-gradient(circle at top left, #ff6e6e 0%, #000000 120%);
+            z-index: 0;
+            /* Sits behind content */
         }
 
-        #pbr-part-2 {
-            display: none;
-            opacity: 0;
+
+        /* Wrapper for all content to sit above the overlay and be centered */
+        .s6-content-wrapper {
+            position: relative;
+            z-index: 1;
+            width: 100%;
+            /* NEW: Use flexbox for vertical layout */
+            display: flex;
+            flex-direction: column;
+            /* Stack items vertically */
+            align-items: center;
+            /* Center items horizontally */
         }
 
-        #slide-3 .two-col-layout {
-            display: grid;
-            grid-template-columns: 1fr 2fr;
-            gap: 5vw;
+        .s6-main-title {
+            font-size: 5.5rem;
+            font-weight: 800;
+            color: rgba(255, 255, 255, 0.8);
+            margin-bottom: 5vh;
+            /* Increase space between title and cards */
+            text-align: center;
+            /* Center the title text */
+        }
+
+        /* Container for the cards to use flexbox */
+        .s6-cards-container {
+            display: flex;
+            justify-content: center;
+            gap: 4vw;
+            width: 100%;
+            /* Ensure it takes full width of its parent */
+        }
+
+        .s6-card {
+            flex-basis: 45%;
+            max-width: 600px;
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            border-radius: 12px;
+            padding: 3rem;
+            color: white;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
+            backdrop-filter: blur(10px);
+        }
+
+        .s6-card .card-title {
+            font-size: 1.8rem;
+            font-weight: 600;
+            margin-bottom: 1.5rem;
+            display: flex;
+            align-items: center;
+        }
+
+        .s6-card .card-title svg {
+            width: 28px;
+            height: 28px;
+            margin-right: 1rem;
+            color: var(--main-red);
+            background: white;
+            border-radius: 50%;
+            padding: 5px;
+        }
+
+        .s6-card .card-content {
+            font-size: 1.2rem;
+            line-height: 1.8;
+            font-weight: 300;
+        }
+
+        .s6-card .card-solution {
+            margin-top: 2rem;
+            padding-top: 2rem;
+            border-top: 1px solid rgba(255, 255, 255, 0.2);
+            font-weight: 400;
+            font-size: 1.2rem;
+            flex-direction: row-reverse;
+        }
+
+        .solution-image {
+            flex-shrink: 0;
+            /* Prevent image from shrinking */
+            width: 80px;
+            height: 80px;
+        }
+
+        .card-solution p {
+            flex: 1;
+            /* Allow text to take the remaining space */
+            font-weight: 400;
+            font-size: 1.2rem;
+            line-height: 1.7;
+        }
+
+        .s6-card .highlight {
+            font-weight: 600;
+            background: white;
+            color: var(--main-red);
+            padding: 0.1em 0.4em;
+            border-radius: 4px;
+        }
+
+        /* Slide 7: Big Stats & Comparison */
+        .s7-container {
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
             align-items: center;
             width: 100%;
-
+            padding: 6vw;
         }
 
-        #slide-3 .col-left {
-            text-align: right;
+        .s7-main-title {
+            font-size: 3.5rem;
+            font-weight: 800;
+            color: var(--text-dark);
+            margin-bottom: 5rem;
+            /* Creates space between title and stats */
+            text-align: center;
         }
 
-        #slide-3 .col-left h3 {
-            font-size: clamp(2rem, 4vw, 3.5rem);
-            color: var(--red);
-            line-height: 1.2;
-            font-weight: 700;
+        .s7-stats-row {
+            display: flex;
+            align-items: center;
+            gap: 4vw;
+            margin-bottom: 4rem;
         }
 
-        #slide-3 .col-left h3 span {
+        .s7-stat-item .value {
+            font-size: 7rem;
+            font-weight: 800;
+            color: var(--main-red);
+            line-height: 1;
+        }
+
+        .s7-stat-item .label {
+            font-size: 1.3rem;
+            margin-top: 1rem;
+            text-align: center;
+        }
+
+        .s7-stat-item .old-value {
+            text-decoration: line-through;
+            color: var(--text-muted);
+            font-size: 4rem;
+        }
+
+        .s7-arrow {
+            font-size: 3rem;
+            color: var(--text-muted);
+        }
+
+        .s7-comparison-row {
+            display: flex;
+            width: 100%;
+            max-width: 1200px;
+            gap: 3vw;
+        }
+
+        .s7-comparison-item {
+            flex: 1;
+            text-align: center;
+        }
+
+        .s7-comparison-item h2 {
+            margin-bottom: 1rem;
+        }
+
+        .s7-comparison-item .image-wrapper {
+            height: 35vh;
+            border: 1px solid #eee;
+            border-radius: 8px;
+        }
+
+        /* Slide 8: Gallery */
+        .s8-container {
+            width: 100%;
+            display: flex;
+            flex-direction: column;
+            padding: 6vw 8vw;
+        }
+
+        .s8-header {
+            text-align: center;
+            margin-bottom: 4rem;
+        }
+
+        .s8-header h1 {
+            font-size: 3rem;
+        }
+
+        .s8-header p {
             font-size: 1.2rem;
-            color: var(--grey);
-            font-weight: 300;
-            display: block;
+            color: var(--text-muted);
         }
 
-        #slide-3 .col-right h2 {
-            border: none;
-            padding-left: 0;
-        }
-
-        .comparison-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+        .s8-gallery {
+            display: flex;
             gap: 2vw;
             width: 100%;
-            margin-top: 4vh;
         }
 
-        .two-item-grid {
-            grid-template-columns: repeat(2, 1fr);
+        .s8-item {
+            flex: 1;
+            text-align: center;
         }
 
-        .comparison-card {
-            background: rgba(20, 20, 20, 0.7);
-            border: 1px solid rgba(255, 255, 255, 0.1);
-            backdrop-filter: blur(10px);
-            padding: 2vw;
-            border-radius: 10px;
+        .s8-item .image-wrapper {
+            height: 45vh;
+            margin-bottom: 1.5rem;
+        }
+
+        .s8-item .caption {
+            font-weight: 600;
+        }
+
+        /* Slide 9 & 10: Tilted Header Layout */
+        .s9-container {
+            width: 100%;
+            height: 100%;
+            position: relative;
+        }
+
+        .s9-header-bg {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 120%;
+            height: 50%;
+            background: var(--main-red);
+            transform: rotate(-5deg) translate(-10%, -25%);
+            z-index: 0;
+        }
+
+        .s9-content {
+            position: relative;
+            z-index: 1;
+            padding: 8vw;
+        }
+
+        .s9-content h1 {
+            font-size: 3.5rem;
+            color: white;
+            margin-bottom: 4rem;
+        }
+
+        .s9-content ul {
+            background: white;
+            padding: 3rem;
+            border-radius: 8px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.1);
+        }
+
+        .s9-content h2 {
+            font-size: 1.5rem;
+            color: var(--main-red);
+            margin-bottom: 1rem;
+        }
+
+        .s9-content li {
+            font-size: 1.1rem;
+            list-style: none;
+            margin-bottom: 1rem;
+        }
+
+        /* Slide 11 & 12: Final */
+        .s11-container {
+            width: 100%;
             display: flex;
+            justify-content: center;
+            align-items: center;
             flex-direction: column;
         }
 
-        .comparison-card h3 {
-            color: var(--red);
-            font-size: clamp(1.1rem, 1.6vw, 1.7rem);
-            border-bottom: 2px solid var(--red);
-            padding-bottom: 10px;
-            margin-bottom: 15px;
-            font-weight: 700;
+        .s11-text {
+            font-size: 8rem;
+            font-weight: 800;
+            color: var(--main-red);
         }
 
-        .comparison-card li::before {
-            display: none;
+        .s11-subtext {
+            font-size: 1.5rem;
+            color: var(--text-muted);
         }
 
-        .comparison-card li {
-            padding-left: 0;
-        }
-
-        #slide-5 {
-            text-align: center;
-            align-items: center;
-        }
-
-        #slide-5 .impact-text {
-            font-size: clamp(4rem, 10vw, 8rem);
-            font-weight: 900;
-            color: var(--red);
-            text-shadow: 0 0 20px var(--red), 0 0 40px var(--dark-red);
-            margin: 3vh 0;
-        }
-
-        #slide-5 p {
-            margin: 0 auto;
-            max-width: 600px;
-        }
-
-        /********************************************/
-        /*       !!! SLIDE 6 - 全新布局 !!!         */
-        /********************************************/
-        #slide-6 {
-            align-items: flex-start;
-            justify-content: flex-start;
-            /* Align content to the top */
-        }
-
-        #slide-6 .slide-title {
+        /* NEW Slide 7: Training Process (Unique Classes) */
+        .new1-container {
             width: 100%;
-            border-left: none;
-            padding-left: 0;
-            margin-top: 6vh;
-            margin-bottom: 4vh;
-            margin-left: -5vh;
+            display: flex;
+            flex-direction: column;
+            padding: 6vw 8vw;
         }
 
-        #slide-6::after {
-            content: '';
-            position: absolute;
-            right: -10vw;
-            top: 0;
-            width: 45vw;
-            height: 100%;
-            background: linear-gradient(45deg, var(--dark-red), rgba(10, 10, 10, 0.8));
-            transform: skewX(15deg);
-            z-index: 1;
-        }
-
-        .dual-column-slanted-layout {
-            /* Changed from grid to block for vertical stacking */
-            display: block;
-            width: 100%;
-            position: relative;
-            z-index: 2;
-        }
-
-        .dual-column-slanted-layout .column-left {
-            /* Set width and bottom margin for the top block */
-            width: 60%;
-            margin-bottom: 2vh;
-        }
-
-        .dual-column-slanted-layout .column-right {
-            /* Reset transform, push to the right for a staggered effect */
-            transform: none;
-            margin-left: 4rem;
-            width: 60%;
-        }
-
-        #slide-6 ol {
-            list-style: none;
-            counter-reset: solution-counter;
-            margin-top: 0;
-        }
-
-        #slide-6 li {
-            padding-left: 4rem;
-            min-height: 4rem;
-            margin-bottom: 0.5rem;
-        }
-
-        #slide-6 .column-left li::before {
-            counter-increment: solution-counter;
-            content: "0" counter(solution-counter);
-            font-size: 3rem;
-            font-weight: 900;
-            color: rgba(255, 255, 255, 0.2);
-            line-height: 1;
-            transform: translateY(-20%);
-        }
-
-        #slide-6 .column-right ul {
-            margin-top: 0;
-        }
-
-        #slide-6 .column-right li {
-            padding-left: 2em;
-        }
-
-        #slide-6 .column-right li::before {
-            content: '■';
-            font-size: 1.2em;
-            line-height: 1.4;
-        }
-
-
-        #slide-9 {
+        .new1-header {
             text-align: center;
-            align-items: center;
+            margin-bottom: 4rem;
+        }
+
+        .new1-header h1 {
+            font-size: 3.5rem;
+        }
+
+        .new1-header p {
+            font-size: 1.4rem;
+            color: var(--text-muted);
+            margin-top: 1rem;
+            max-width: 60ch;
+            margin-left: auto;
+            margin-right: auto;
+        }
+
+        .new1-gallery {
+            display: flex;
+            gap: 2vw;
+            width: 100%;
+        }
+
+        .new1-item {
+            flex: 1;
+            text-align: center;
+        }
+
+        .new1-item .image-wrapper {
+            /* We can reuse the generic .image-wrapper style */
+            height: 45vh;
+            margin-bottom: 1.5rem;
+        }
+
+        .new1-caption {
+            font-weight: 600;
+            font-size: 1.3rem;
+        }
+
+        @keyframes moveGrid {
+            from {
+                background-position: 0 0;
+            }
+
+            to {
+                /* 移动一个网格单元的距离 (50px, 50px) 来实现无缝循环 */
+                background-position: 1000px 1000px;
+            }
         }
     </style>
 </head>
 
 <body>
+    <div class="background-grid"></div>
+    <div class="page-number" id="page-number">01</div>
 
-    <canvas id="grid-canvas"></canvas>
-    <div class="presentation">
-        <!-- 幻灯片 1: 标题页 -->
-        <section class="slide" id="slide-1">
-            <div class="title-block">
-                <h3 class="animated fade-in-down">可嵌入传统图形渲染管线的</h3>
-                <h1 class="animated fade-in-down delay-1">基于Transformer的快速PBR渲染方案</h1>
+    <div class="ppt-container">
+        <!-- Slide 1: Title -->
+        <section class="slide" data-animation="title">
+            <div class="s1-red-block"></div>
+            <div class="s1-container">
+                <div class="s1-title">
+                    <div class="line">
+                        <h2>可嵌入传统图形学渲染管线的</h2>
+                    </div>
+                    <div class="line">
+                        <h1>基于Transformer的</h1>
+                    </div>
+                    <div class="line">
+                        <h1>快速PBR渲染方案</h1>
+                    </div>
+                </div>
+                <div class="s1-subtitle">
+                    <p>一种面向下一代实时图形的AI加速范式探索</p>
+                </div>
+                <p class="s1-details">指导老师：袁春<br>助教：郑江茂 张洋 俞承霖<br>汇报人：苏世瑞, 李嘉祥 </p>
             </div>
-            <h3 class="animated fade-in-up delay-2" style="margin-top: 5vh;">报告人：雨伞鱼</h3>
         </section>
 
-        <!-- 幻灯片 2: PBR算力黑洞 -->
-        <section class="slide" id="slide-2" data-sub-steps="2">
-            <h2 class="slide-title animated fade-in-down">PBR渲染的算力“黑洞”</h2>
-            <div class="pbr-grid-container">
-                <div id="pbr-part-1" class="comparison-grid two-item-grid animated fade-in-up">
-                    <div class="comparison-card">
-                        <h3>初始计算：亿级光线</h3>
-                        <p>一张1K图像有超 <strong>100万</strong> 像素。为消除噪点，每个像素需采样 <strong>100+</strong> 次，这意味着初始就有超
-                            <strong>1亿</strong> 条光线要追踪。
-                        </p>
-                        <img src="title-1.png" class="image-placeholder">
-                    </div>
-
-                    <div class="comparison-card">
-                        <h3>光线弹射：指数爆炸</h3>
-                        <p>每条光线在场景中平均弹射 <strong>8-16</strong> 次才能找到光源，每次弹射都要和所有物体求交。总计算量轻松突破 <strong>数十亿</strong>。</p>
-                        <img src="title-2.png" class="image-placeholder">
-                    </div>
-                </div>
-
-                <div id="pbr-part-2" class="comparison-grid two-item-grid">
-                    <div class="comparison-card">
-                        <h3>硬件瓶颈：分钟级等待</h3>
-                        <p>即便在顶级的RTX 4090上，渲染一张包含复杂材质的“简单”场景，耗时也以 <strong>分钟</strong> 计算，无法用于实时交互。</p>
-                        <img src="title-3.png" class="image-placeholder">
-                    </div>
-                    <div class="comparison-card">
-                        <h3>电影级代价：天级渲染</h3>
-                        <p>当涉及皮肤（次表面散射）、烟雾（体渲染）等效果，单帧画面在专业渲染农场耗费 <strong>数小时</strong> 甚至 <strong>数天</strong> 都是常态。</p>
-                        <img src="title-4.png" class="image-placeholder">
-                    </div>
+        <!-- Slide 2: Background -->
+        <!-- Slide 2: Background -->
+        <section class="slide" data-animation="split">
+            <div class="s2-red-side">
+                <div class="image-placeholder"
+                    style="background-image: url('final/1.png'); background-size: cover; background-position: center; border: none;">
                 </div>
             </div>
+            <div class="s2-white-side">
+                <!-- The content inside this div will now be vertically centered -->
+                <div>
+                    <h1>研究背景</h1>
+                    <ul>
+                        <li><strong>“光” | 物理真实感:</strong> PBR通过模拟真实世界的光线物理传播，是创造顶级视觉沉浸感的黄金标准，被广泛应用于电影、游戏和工业设计领域。</li>
+                        <li><strong>“影” | 高昂时间成本:</strong> 其核心技术，蒙特卡洛路径追踪，为追求无噪点的真实效果，需要进行海量光线采样，导致渲染时间极长（我们的基准为<span
+                                class="highlight">30秒/帧</span>），成为实时交互应用的性能瓶颈。</li>
+                        <li><strong>核心问题:</strong> 我们能否利用深度学习的强大推理能力，来近似这一复杂耗时的渲染过程，从而在保证高质量视觉效果的前提下，将渲染速度提升一个<span
+                                class="highlight">数量级</span>，从根本上解决质量与速度的矛盾？</li>
+                    </ul>
+                </div>
+            </div>
+        </section>
+
+        <!-- Slide 3: Overall Architecture -->
+        <!-- Slide 3: Overall Architecture (REVERSED VERTICAL LAYOUT) -->
+        <section class="slide" data-animation="verticalArch">
+            <div class="s3-new-container">
+                <!-- Left side: Image Panel -->
+                <div class="s3-image-panel">
+                    <img src="final/3.png" alt="Overall Architecture" style="width: auto; height: 120%;">
+                </div>
+                <!-- Right side: Text Panel with Red Background -->
+                <div class=" s3-text-panel">
+                    <h1>整体架构</h1>
+                    <ul>
+                        <li>
+                            <strong>Scene Transformer:</strong>
+                            负责编码整个场景的几何与材质信息，形成对3D世界全局的、深度的上下文理解。
+                        </li>
+                        <li>
+                            <strong>View Transformer:</strong>
+                            接收特定视角的相机射线，并与场景上下文进行高效的交叉注意力交互，查询出每个像素应有的颜色信息。
+                        </li>
+                        <li>
+                            <strong>DPT Decoder:</strong>
+                            将View Transformer输出的多尺度特征图进行上采样和融合，最终重建出高清、细节丰富的最终渲染图像。
+                        </li>
+                    </ul>
+                </div>
+            </div>
+        </section>
+
+        <!-- Slide 4: Scene Transformer Hybrid Detail -->
+        <section class="slide" data-animation="techDetailHybrid">
+            <div class="tech-detail-slide">
+                <div class="text-content">
+                    <div class="eyebrow">模块一</div>
+                    <h1>Scene Transformer</h1>
+                    <p>将无序的三角面片集合，编码为包含全局几何信息的<strong class="highlight">场景Tokens</strong>。这是模型理解“世界是什么样”的第一步。</p>
+                </div>
+                <div class="diagram-content">
+                    <div class="main-diagram">
+                        <img src="final/ST.png" alt="Overall Architecture" style="width: auto; height: 120%;">
+                    </div>
+                    <div class="diagram-box" style="bottom: -50px; right: -20px; width: 200px;">
+                        <h3>三角面片输入</h3>
+                        <p>Mesh Data (v1, v2, v3)</p>
+                    </div>
+                    <div class="diagram-box" style="top: 58%; left: 0%; transform: translateY(-50%); width: 220px;">
+                        <h3>RoPE 编码</h3>
+                        <p>保留相对空间位置</p>
+                    </div>
+                    <div class="diagram-box" style="bottom: 600px; right: -10px; width: 200px;">
+                        <h3>Scene Tokens 输出</h3>
+                        <p>8层MHSA提取特征</p>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Slide 5: View Transformer Hybrid Detail -->
+        <section class="slide" data-animation="techDetailHybrid">
+            <div class="tech-detail-slide" style="flex-direction: row-reverse;">
+                <div class="text-content">
+                    <div class="eyebrow">模块二</div>
+                    <h1>View Transformer</h1>
+                    <p>将每个像素的<strong class="highlight">射线(Query)</strong>与全局的<strong
+                            class="highlight">场景(Key/Value)</strong>进行深度交互，计算出最终颜色。这是“看”向场景并“画”出图像的核心。</p>
+                </div>
+                <div class="diagram-content">
+                    <div class="main-diagram">
+                        <img src="final/VT.png" alt="Overall Architecture" style="width: auto; height: 120%;">
+                    </div>
+                    <div class="diagram-box" style="bottom: -8%; left: 50%; width: 200px;">
+                        <h3>Ray Tokens (Query)</h3>
+                        <p>每个像素的观察射线</p>
+                    </div>
+                    <div class="diagram-box" style="bottom: 50px; left: 0%; width: 200px;">
+                        <h3>Scene Tokens (K/V)</h3>
+                        <p>来自上一模块</p>
+                    </div>
+                    <div class="diagram-box" style="bottom: 50%; left: 20%; transform: translateX(-50%); width: 280px;">
+                        <h3>交叉注意力 (12层)</h3>
+                        <p>射线“查询”场景，获取渲染信息</p>
+                    </div>
+                    
+                    <div class="diagram-box" style="top: 0%; right: -25%; transform: translateX(-50%); width: 280px;">
+                        <h3>DPTDecoder</h3>
+                        <p>提取不同中间层共同解码输出</p>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Slide 6: Challenges -->
+        <section class="slide" data-animation="focusCards">
+            <div class="s6-container">
+                <div class="gradient-overlay"></div>
+                <div class="s6-content-wrapper">
+                    <div class="s6-main-title"><span>挑</span><span>战</span><span>与</span><span>对</span><span>策</span>
+                    </div>
+                    <div class="s6-cards-container">
+                        <div class="s6-card">
+                            <div class="card-title"><svg xmlns="http://www.w3.org/2000/svg" fill="none"
+                                    viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
+                                    <path stroke-linecap="round" stroke-linejoin="round"
+                                        d="M20.25 6.375c0 2.278-3.694 4.125-8.25 4.125S3.75 8.653 3.75 6.375m16.5 0c0-2.278-3.694-4.125-8.25-4.125S3.75 4.097 3.75 6.375m16.5 0v11.25c0 2.278-3.694 4.125-8.25 4.125s-8.25-1.847-8.25-4.125V6.375m16.5 0v3.75m-16.5-3.75v3.75m16.5 0v3.75C20.25 16.153 16.556 18 12 18s-8.25-1.847-8.25-4.125v-3.75m16.5 0c0 2.278-3.694 4.125-8.25 4.125s-8.25-1.847-8.25-4.125" />
+                                </svg>挑战一：高质量数据稀缺</div>
+                            <div class="card-content">要训练一个泛化能力强的神经渲染器，需要海量且多样化的“场景-图像”配对数据，而现有公开数据集难以满足我们的特定需求。</div>
+                            <!-- MODIFIED STRUCTURE BELOW -->
+                            <div class="card-solution">
+
+                                <p><strong>对策：</strong> 我们自主搭建了基于Blender的自动化数据生成管线，程序化地生成了包含数千个高质量配对数据。</p>
+                            </div>
+                        </div>
+                        <div class="s6-card">
+                            <div class="card-title"><svg xmlns="http://www.w3.org/2000/svg" fill="none"
+                                    viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
+                                    <path stroke-linecap="round" stroke-linejoin="round"
+                                        d="M3.75 3v11.25A2.25 2.25 0 006 16.5h2.25M3.75 3h-1.5m1.5 0h16.5m0 0h1.5m-1.5 0v11.25A2.25 2.25 0 0118 16.5h-2.25m-7.5 0h7.5m-7.5 0l-1.125-1.5M15 12l-1.5 1.5m0 0l-1.5-1.5M15 12l1.5 1.5m0 0l1.5-1.5M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5M16.5 12l-1.5 1.5m0 0l-1.5-1.5m1.5 1.5l1.5 1.5m0 0l1.5-1.5" />
+                                </svg>挑战二：巨型模型与训练开销</div>
+                            <div class="card-content">我们模型的<span
+                                    class="highlight">5亿</span>参数量虽然强大，但也带来了巨大的显存占用和漫长的训练周期，严重影响了实验迭代的效率。</div>
+                            <!-- MODIFIED STRUCTURE BELOW -->
+                            <div class="card-solution">
+                                <p><strong>对策：</strong> 全面采用混合精度训练（FP16）与梯度累积技术，在不牺牲模型精度的前提下，大幅降低了显存占用并加速了训练进程。</p>
+                            </div>
+                        </div>
+
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- NEW Slide 7: Training Process -->
+        <section class="slide" data-animation="new1">
+            <div class="new1-container">
+                <div class="new1-header">
+                    <h1>训练过程可视化</h1>
+                    <p>在 <span class="highlight">L1 + 0.5 * LPIPS</span> 复合损失函数的引导下，模型从随机噪声开始，逐步学习并重建出清晰、真实的图像。</p>
+                </div>
+                <div class="new1-gallery">
+                    <div class="new1-item">
+                        <div class="image-wrapper">
+                            <img src="final/epoch_left.png" style="width: auto; height: 100%;">
+                        </div>
+                        <div class="new1-caption">Epoch = 20 (初步轮廓)</div>
+                    </div>
+                    <div class="new1-item">
+                        <div class="image-wrapper">
+                            <img src="final/epoch_mid.png" style="width: auto; height: 100%;">
+                        </div>
+                        <div class="new1-caption">Epoch = 100 (结构与光照)</div>
+                    </div>
+                    <div class="new1-item">
+                        <div class="image-wrapper">
+                            <img src="final/epoch_right.png" style="width: auto; height: 100%;">
+                        </div>
+                        <div class="new1-caption">Epoch = 400 (细节收敛)</div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Slide 7: Results -->
+        <section class="slide" data-animation="bigStats">
+            <div class="s7-container">
+                <h1 class="s7-main-title">实验结果与对比</h1>
+
+                <div class="s7-stats-row">
+                    <div class="s7-stat-item">
+                        <div class="old-value">30s</div>
+                        <div class="label">Cycles渲染器</div>
+                    </div>
+                    <div class="s7-arrow">→</div>
+                    <div class="s7-stat-item">
+                        <div class="value">3s</div>
+                        <div class="label">我们的模型</div>
+                    </div>
+                    <div class="s7-stat-item" style="border-left: 2px solid #ddd; padding-left: 4vw;">
+                        <div class="value">10X</div>
+                        <div class="label">速度提升</div>
+                    </div>
+                </div>
+                <div class="s7-comparison-row">
+                    <div class="s7-comparison-item">
+                        <h2>Cycles 渲染 (Ground Truth)</h2>
+                        <div class="image-wrapper">
+                            <img src="final/nailong-cycles.png" style="width: auto; height: 100%;">
+                        </div>
+                    </div>
+                    <div class="s7-comparison-item">
+                        <h2>我们的模型渲染</h2>
+                        <div class="image-wrapper">
+                            <img src="final/nailong.png" style="width: auto; height: 100%;">
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Slide 8: Generalization -->
+        <section class="slide" data-animation="gallery">
+            <div class="s8-container">
+                <div class="s8-header">
+                    <h1>核心优势：数据驱动的泛化能力</h1>
+                    <p>我们的框架是一个<span class="highlight">通用的图形合成器</span></p>
+                </div>
+                <div class="s8-gallery">
+                    <div class="s8-item">
+                        <div class="image-wrapper">
+                            <div class="image-placeholder"
+                                style="background-image: url('final/4.png'); background-size: cover; background-position: center; border: none;">
+                            </div>
+                        </div>
+                        <div class="caption">PBR风格输出</div>
+                    </div>
+                    <div class="s8-item">
+                        <div class="image-wrapper">
+                            <div class="image-placeholder"
+                                style="background-image: url('final/5.png'); background-size: cover; background-position: center; border: none;">
+                            </div>
+                        </div>
+                        <div class="caption">卡通风格输出</div>
+                    </div>
+                    <div class="s8-item">
+                        <div class="image-wrapper">
+                            <div class="image-placeholder"
+                                style="background-image: url('final/6.png'); background-size: cover; background-position: center; border: none;">
+                            </div>
+                        </div>
+                        <div class="caption">水墨风格输出</div>
+                    </div>
+                </div>
+            </div>
+        </section>
+        <!-- Slide 9: Conclusion -->
+        <section class="slide" data-animation="tiltedHeader">
+            <div class="s9-container">
+                <div class="s9-header-bg"></div>
+                <div class="s9-content">
+                    <h1>总结与局限性</h1>
+                    <ul>
+                        <li>
+                            <h2>工作总结与核心贡献</h2>
+                            <p style="font-size: 1.3rem; line-height: 1.9;">
+                                本项目成功设计并实现了一种新颖的、可嵌入传统图形管线的<strong
+                                    class="highlight">双Transformer快速PBR渲染方案</strong>。我们通过创新的<strong
+                                    class="highlight">RoPE几何编码</strong>与场景-视图解耦架构，验证了利用序列模型直接从场景几何生成高质量渲染图像的可行性。实验证明，该方案在保持高视觉保真度的同时，实现了相较于传统路径追踪<strong
+                                    class="highlight">10倍</strong>的渲染速度提升，为实时图形领域的AI加速提供了一种有价值的新范式。
+                            </p>
+                        </li>
+                        <li style="margin-top:2.5rem">
+                            <h2>坦诚局限与未来挑战</h2>
+                            <p style="font-size: 1.3rem; line-height: 1.9;">
+                                尽管成果显著，我们仍清醒认识到当前方案的局限性：
+                                <br><strong>1. 模型规模：</strong> <strong
+                                    class="highlight">5亿</strong>参数量导致巨大的存储和计算开销，是部署到消费级硬件的主要障碍。
+                                <br><strong>2. 效果边界：</strong> 模型对训练数据中少见的高频物理效应，如<strong
+                                    class="highlight">焦散、多次镜面反射和复杂折射</strong>等现象的模拟能力尚有不足。
+                                <br><strong>3. 性能瓶颈：</strong>
+                                虽然实现了数量级加速，但3秒/帧的渲染速度距离真正的实时应用（如33ms/帧）仍有较大差距，需进一步的算法与工程优化。
+                            </p>
+                        </li>
+                    </ul>
+                </div>
+            </div>
+        </section>
+        <!-- Slide 10: Future Work --><!-- Slide 10: Future Work -->
+        <section class="slide" data-animation="tiltedHeader">
+            <div class="s9-container">
+                <div class="s9-header-bg" style="background: #212121;"></div>
+                <div class="s9-content">
+                    <h1>未来方向</h1>
+                    <ul style="font-size: 1.2rem; line-height: 1.8;">
+                        <li>
+                            <h2>近期目标：模型效果与泛化性增强</h2>
+                            <p style="padding-left: 1.5rem; border-left: 3px solid var(--main-red);">
+                                <strong>扩展数据集：</strong> 进一步丰富我们的自建数据集，系统性地加入包含复杂光学现象（如透明材质的折射、金属的高光反射、次表面散射等）的场景。
+                                <br><strong>提升效果上限：</strong>
+                                针对当前模型的短板，研究引入更精细的BRDF参数作为条件输入，或设计专门的网络模块与损失函数，以提升对焦散等高频物理效应的模拟能力。
+                            </p>
+                        </li>
+                        <li style="margin-top:2rem">
+                            <h2>中期核心：性能优化与实时化部署</h2>
+                            <p style="padding-left: 1.5rem; border-left: 3px solid var(--main-red);">
+                                <!-- MODIFIED TEXT BELOW -->
+                                <strong>算法层面优化：</strong> 探索并引入前沿的Efficient Transformer架构（如Performer,
+                                Linformer等），它们通过近似注意力机制，可将Transformer的计算复杂度从<strong
+                                    class="highlight">O(N²)降低到O(N)</strong>。这将从根本上、数量级地加速模型的推理速度。
+                                <br><strong>工程层面压缩：</strong> 在算法优化的基础上，进一步应用<strong
+                                    class="highlight">知识蒸馏</strong>、<strong class="highlight">网络剪枝</strong>与<strong
+                                    class="highlight">权重 量化</strong>等压缩技术，最终目标是在主流消费级GPU上，将渲染速度推向<strong
+                                    class="highlight">实时（>30 FPS）</strong>的性能标准。
+                            </p>
+                        </li>
+                        <li style="margin-top:2rem">
+                            <h2>远期愿景：交互式与可控神经渲染</h2>
+                            <p style="padding-left: 1.5rem; border-left: 3px solid var(--main-red);">
+                                <strong>实现可控编辑：</strong> 探索将光照参数（如光源位置、强度、颜色）和材质属性作为模型的动态条件输入，实现对渲染结果的<strong
+                                    class="highlight">实时交互式编辑</strong>。
+                                <br><strong>赋能创意流程：</strong>
+                                最终愿景是打造一个能无缝集成到现代设计与游戏引擎中的AI渲染插件，为艺术家和设计师提供前所未有的创作效率与自由度，真正实现“所思即所见”。
+                            </p>
+                        </li>
+                    </ul>
+                </div>
+            </div>
+        </section>
+
+        <!-- Slide 11: Thanks -->
+        <section class="slide" data-animation="final">
+            <div class="s11-container">
+                <div class="s11-text">Thank You</div>
+                <!-- MODIFIED TEXT BELOW -->
+                <p class="s11-subtext" style="line-height: 1.8;">
+                    衷心感谢袁春老师的悉心指导<br>以及郑江茂、张洋、俞承霖助教在项目过程中的宝贵帮助！
+                </p>
+            </div>
+        </section>
+        <!-- NEW Slide 12: References -->
+        <section class="slide" data-animation="tiltedHeader">
+            <div class="s9-container">
+                <!-- Using a neutral dark grey for the header -->
+                <div class="s9-header-bg" style="background: #333333;"></div>
+                <div class="s9-content">
+                    <h1>参考文献</h1>
+                    <!-- Using a smaller font size and more line height for readability -->
+                    <ul style="font-size: 1.1rem; line-height: 2.2; max-width: 80ch;">
+                        <li>Mildenhall B, Srinivasan P P, Tancik M, et al. NeRF: Representing Scenes as Neural Radiance
+                            Fields for View Synthesis [EB/OL]. arXiv, 2020 08 03 </li>
+                        <li>Su, J., et al. (2021). "RoFormer: Enhanced Transformer with Rotary Position Embedding".</li>
+                        <li>Dao T, Fu D Y, Ermon S, et al. FlashAttention: Fast and Memory-Efficient Exact Attention
+                            with IO-Awareness [EB/OL]. arXiv, 2022 06 23 </li>
+                        <li> Katharopoulos A, Vyas A, Pappas N, et al. Transformers are RNNs: Fast Autoregressive
+                            Transformers with Linear Attention [EB/OL]. arXiv, 2020 08 31 </li>
+                        <!-- 您可以在这里继续添加更多参考文献 -->
+                    </ul>
+                </div>
+            </div>
+        </section>
+        <!-- Slide 13: Q&A -->
+        <section class="slide" data-animation="final">
+            <div class="s11-container">
+                <div class="s11-text">Q & A</div>
+                <div class="s11-subtext">敬请提问</div>
+            </div>
+        </section>
+
     </div>
-    </section>
-    <!-- 幻灯片 3: 核心技术 -->
-    <section class="slide" id="slide-3">
-        <div class="two-col-layout">
-            <div class="col-left animated fade-in-down">
-                <h3>序列到序列<span>的核心思想</span></h3>
-            </div>
-            <div class="col-right">
-                <h2 class="animated fade-in-down delay-1">核心技术解读:</h2>
-                <ul class="animated fade-in-up delay-2">
-                    <li><strong>两阶段架构:</strong> 视图无关的光照计算 + 视图相关的成像渲染。</li>
-                    <li class="delay-1"><strong>关键创新:</strong>
-                        采用<strong>3D相对位置编码</strong>，使Transformer能够理解三维空间中的几何关系。</li>
-                </ul>
-            </div>
-        </div>
-        <!-- === 代码开始：在此处添加图片占位符 === -->
-        <img src="title.png" class="image-placeholder_1 animated fade-in-up delay-3">
-        <!-- === 代码结束 === -->
-    </section>
 
-    <!-- 幻灯片 4: 对比分析 -->
-    <section class="slide" id="slide-4">
-        <h2 class="animated fade-in-down">对比分析：神经渲染的定位</h2>
-        <div class="comparison-grid">
-            <div class="comparison-card animated fade-in-up delay-1">
-                <h3>vs. 路径追踪</h3>
-                <ul>
-                    <li><strong>改进:</strong> 速度快百倍、输出无噪点、天然可微。</li>
-                    <li><strong>代价:</strong> 泛化能力受限于训练数据。</li>
-                </ul>
-            </div>
-            <div class="comparison-card animated fade-in-up delay-2">
-                <h3>vs. NeRF / 高斯溅射</h3>
-                <ul>
-                    <li><strong>目标:</strong> 创作 (我们的方案) vs. 复刻 (NeRF)。</li>
-                    <li><strong>输入:</strong> 3D模型 vs. 真实照片。</li>
-                    <li><strong>本质:</strong> <strong>渲染引擎</strong> vs. <strong>3D扫描仪</strong>。</li>
-                </ul>
-            </div>
-        </div>
-    </section>
-
-    <!-- 幻灯片 5: 现状与局限 -->
-    <section class="slide" id="slide-5">
-        <h2 class="animated fade-in-down">研究现状与局限性</h2>
-        <p class="animated fade-in-up delay-1">Transformer的注意力机制是核心瓶颈:</p>
-        <div class="impact-text animated fade-in-up delay-2">O(N²)</div>
-        <p class="animated fade-in-up delay-3">二次方复杂度导致其难以处理高面数的复杂场景，极大地限制了实用性。</p>
-    </section>
-
-    <!-- 幻灯片 6: 研究方案 (全新斜切布局) -->
-    <section class="slide" id="slide-6">
-        <h2 class="slide-title animated fade-in-down">我们的研究方案</h2>
-        <div class="dual-column-slanted-layout">
-            <div class="column-left animated fade-in-up delay-1">
-                <h4>模型性能优化</h4>
-                <ol>
-                    <li>利用Transformer-VQ的<strong>线性复杂度</strong>架构，通过向量量化将自注意力计算开销从O(N²)降至O(N)。</li>
-                    <li class="delay-1"><strong>码本注意力压缩：</strong> 使用固定码本聚类Key向量，将全局注意力转化为常量级查表运算。</li>
-                    <li class="delay-2"><strong>递归分解计算：</strong> 通过Δ<sup>⊤</sup>V矩阵分解实现因果注意力，显存消耗降低80%+。</li>
-                </ol>
-            </div>
-            <div class="column-right animated fade-in-up delay-2">
-                <h4>自动化数据集构建</h4>
-                <ul>
-                    <li>建立一套自动化流程，通过 <strong>VS Code</strong> 脚本桥接业界标准的 <strong>Blender Cycles</strong> 渲染器。</li>
-                    <li class="delay-1">根据场景配置文件（模型、材质、光照），批量生成高质量的PBR渲染图像，作为我们模型训练的“标准答案”。</li>
-                </ul>
-            </div>
-        </div>
-    </section>
-
-    <!-- 幻灯片 7: 预期成果 -->
-    <section class="slide" id="slide-7">
-        <h2 class="animated fade-in-down">预期成果与研究意义</h2>
-        <div class="comparison-grid">
-            <div class="comparison-card animated fade-in-up delay-1">
-                <h3>预期成果</h3>
-                <ul>
-                    <li>一个性能优化的Transformer双阶段渲染模型，能处理<strong>更高复杂度</strong>的场景。</li>
-                    <li>渲染速度显著优于传统<strong>cycles渲染器</strong>，同时保持相近的图像质量。</li>
-                </ul>
-            </div>
-            <div class="comparison-card animated fade-in-up delay-2">
-                <h3>研究意义</h3>
-                <ul>
-                    <li>推动通用神经渲染技术走向<strong>实用化</strong>，解决其关键性能瓶颈。</li>
-                    <li>为大规模神经网络在复杂3D图形学任务中的应用提供新的优化思路。</li>
-                </ul>
-            </div>
-        </div>
-    </section>
-
-    <!-- 幻灯片 8: 泛化性与风格化 -->
-    <section class="slide" id="slide-8">
-        <h2 class="animated fade-in-down" style="margin-top:5vh;">模型的泛化性与风格化潜力</h2>
-        <p class="animated fade-in-up delay-1" style="max-width: 900px; margin-bottom: -1vh; margin-left: 3vh;">
-            由于我们的模型是数据驱动的，其渲染风格并不局限于物理真实。通过使用不同的训练数据集，模型可以学习并生成高度风格化的效果，例如“三渲二”卡通渲染，为艺术创作提供无限可能。
-        </p>
-        <div class="comparison-grid two-item-grid">
-            <div class="comparison-card animated fade-in-up delay-2">
-                <h3>照片级真实渲染</h3>
-                <img src="title-6.png" class="image-placeholder">
-            </div>
-            <div class="comparison-card animated fade-in-up delay-3">
-                <h3>“三渲二”卡通风格</h3>
-                <img src="title-7.png" class="image-placeholder">
-            </div>
-        </div>
-    </section>
-
-    <!-- 幻灯片 9: 总结 -->
-    <section class="slide" id="slide-9">
-        <h2 class="animated fade-in-down">总结与展望</h2>
-        <p class="animated fade-in-up delay-1" style="max-width: 700px; margin: 0 auto 5vh auto;">
-            Transformer渲染管线开创了神经渲染的新方向。我们的工作旨在通过引入Transformer-VQ机制，解决其核心性能问题，期待能为实现真正的<strong>实时、高质量、通用</strong>的神经渲染器迈出坚实的一步。
-        </p>
-        <h1 class="animated fade-in-up delay-3" style="font-size: clamp(4rem, 8vw, 7rem); ">谢谢大家</h1>
-    </section>
+    <div class="navigation">
+        <button class="nav-btn" id="prev-btn">←</button>
+        <button class="nav-btn" id="next-btn">→</button>
     </div>
-
-    <!-- 导航 -->
-    <div class="nav-controls">
-        <button id="prev-btn" class="nav-btn">←</button>
-        <button id="next-btn" class="nav-btn">→</button>
-    </div>
-    <div id="slide-counter" class="slide-counter">1 / 9</div>
 
     <script>
-        // --- 动态网格 ---
-        const canvas = document.getElementById('grid-canvas');
-        const ctx = canvas.getContext('2d');
-        let width, height, gridSize, offsetX, offsetY;
-        function setupGrid() { width = canvas.width = window.innerWidth; height = canvas.height = window.innerHeight; gridSize = 40; offsetX = 0; offsetY = 0; }
-        function drawGrid() { if (!ctx) return; ctx.clearRect(0, 0, width, height); ctx.strokeStyle = 'rgba(255, 0, 51,  0.15)'; ctx.lineWidth = 1; for (let x = -gridSize + (offsetX % gridSize); x < width; x += gridSize) { ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, height); ctx.stroke(); } for (let y = -gridSize + (offsetY % gridSize); y < height; y += gridSize) { ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(width, y); ctx.stroke(); } offsetX += 0.2; offsetY += 0.2; requestAnimationFrame(drawGrid); }
-        window.addEventListener('resize', setupGrid); setupGrid(); drawGrid();
+        document.addEventListener('DOMContentLoaded', () => {
+            const slides = document.querySelectorAll('.slide');
+            const nextBtn = document.getElementById('next-btn');
+            const prevBtn = document.getElementById('prev-btn');
+            const pageNumber = document.getElementById('page-number');
+            let currentSlide = 0;
+            let isAnimating = false;
+            const totalSlides = slides.length;
 
-        /********************************************/
-        /*       !!! 动画核心重构部分 !!!         */
-        /********************************************/
-        const slides = document.querySelectorAll('.slide');
-        const prevBtn = document.getElementById('prev-btn');
-        const nextBtn = document.getElementById('next-btn');
-        const slideCounter = document.getElementById('slide-counter');
-        let currentSlide = 0;
-        let isNavigating = false;
-        const animationDuration = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--animation-speed')) * 1000;
+            gsap.set(slides, { autoAlpha: 0 });
+            gsap.set(slides[0], { autoAlpha: 1 });
 
-        // 新增：内部步骤状态
-        let currentSubStep = 0;
-
-        // 核心幻灯片切换函数
-        function goToSlide(newIndex, direction) {
-            if (isNavigating || newIndex < 0 || newIndex >= slides.length || newIndex === currentSlide) {
-                return;
-            }
-            isNavigating = true;
-            currentSubStep = 0; // 重置子步骤
-
-            const oldSlide = slides[currentSlide];
-            const newSlide = slides[newIndex];
-
-            if (direction === 'next') {
-                oldSlide.classList.add('exit-to-left');
-                newSlide.classList.add('enter-from-right');
-            } else {
-                oldSlide.classList.add('exit-to-right');
-                newSlide.classList.add('enter-from-left');
+            function updatePageNumber(index) {
+                pageNumber.textContent = (index + 1).toString().padStart(2, '0');
             }
 
-            newSlide.classList.add('active');
-            currentSlide = newIndex;
-            updateCounter();
+            function goToSlide(index) {
+                if (isAnimating) return;
+                isAnimating = true;
 
-            setTimeout(() => {
-                oldSlide.classList.remove('active', 'exit-to-left', 'exit-to-right');
-                newSlide.classList.remove('enter-from-right', 'enter-from-left');
-                isNavigating = false;
-            }, animationDuration);
-        }
+                const fromSlide = slides[currentSlide];
+                const toSlide = slides[index];
 
-        // 处理内部步骤动画
-        function handleSubStep(slideIndex, subStepIndex) {
-            const slide = slides[slideIndex];
-            const part1 = slide.querySelector('#pbr-part-1');
-            const part2 = slide.querySelector('#pbr-part-2');
+                const outTimeline = gsap.timeline({ onComplete: () => gsap.set(fromSlide, { autoAlpha: 0 }) });
+                outTimeline.to(fromSlide, { autoAlpha: 0, duration: 0.5 });
 
-            if (!part1 || !part2) return;
+                const inTimeline = gsap.timeline({ onComplete: () => { isAnimating = false; updateNavButtons(); } });
+                gsap.set(toSlide, { autoAlpha: 1 });
 
-            // 移除所有动画类以重置
-            part1.classList.remove('is-fading-in', 'is-fading-out');
-            part2.classList.remove('is-fading-in', 'is-fading-out');
-
-            if (subStepIndex === 0) { // 回到第一步
-                part2.classList.add('is-fading-out');
-                part1.classList.add('is-fading-in');
-            } else { // 前往第二步
-                part1.classList.add('is-fading-out');
-                part2.classList.add('is-fading-in');
-            }
-        }
-
-        // 新的统一导航函数
-        function navigate(direction) {
-            if (isNavigating) return;
-
-            const slide = slides[currentSlide];
-            const totalSubSteps = parseInt(slide.dataset.subSteps) || 1;
-
-            if (direction === 'next') {
-                if (currentSubStep < totalSubSteps - 1) {
-                    currentSubStep++;
-                    handleSubStep(currentSlide, currentSubStep);
+                // **FIXED LOGIC**: Pass the target slide 'toSlide' into the animation function
+                const animationFunc = window[`animate_${toSlide.dataset.animation}`];
+                if (typeof animationFunc === 'function') {
+                    animationFunc(inTimeline, toSlide); // Pass the slide element
                 } else {
-                    goToSlide(currentSlide + 1, 'next');
+                    inTimeline.from(toSlide, { autoAlpha: 0, duration: 0.8 });
                 }
-            } else if (direction === 'prev') {
-                if (currentSubStep > 0) {
-                    currentSubStep--;
-                    handleSubStep(currentSlide, currentSubStep);
-                } else {
-                    goToSlide(currentSlide - 1, 'prev');
-                }
+
+                currentSlide = index;
+                updatePageNumber(currentSlide);
+                updateNavButtons();
             }
-        }
 
-        function updateCounter() {
-            slideCounter.textContent = `${currentSlide + 1} / ${slides.length}`;
-        }
+            // --- Unique Animation Functions ---
+            // **FIXED**: All functions now accept 'slide' as a parameter and use it for selectors.
+            window.animate_title = (tl, slide) => {
+                tl.from(slide.querySelector('.s1-red-block'), { scaleY: 0, transformOrigin: 'bottom', duration: 1, ease: 'power3.inOut' })
+                    .to(slide.querySelectorAll('.s1-title h1,.s1-title h2, .s1-subtitle p'), { y: 0, stagger: 0.1, duration: 1, ease: 'power3.out' }, '-=0.5')
+                    .from(slide.querySelector('.s1-details'), { opacity: 0, y: 20, duration: 0.5 }, '-=0.5');
+            };
+            window.animate_split = (tl, slide) => {
+                tl.from(slide.querySelector('.s2-red-side'), { xPercent: -100, duration: 1, ease: 'power3.inOut' })
+                    .from(slide.querySelector('.s2-white-side'), { xPercent: 100, duration: 1, ease: 'power3.inOut' }, '<')
+                    .from(slide.querySelectorAll('.s2-white-side > *'), { opacity: 0, y: 30, stagger: 0.15 }, '-=0.5');
+            };
+            // 请用这个新函数替换掉您文件中已有的 animate_verticalArch 函数
+            window.animate_verticalArch = (tl, slide) => {
+                // 1. Animate the image panel fading in with an upward motion (now on the left)
+                tl.from(slide.querySelector('.s3-image-panel'), {
+                    opacity: 0,
+                    y: 50,
+                    duration: 1,
+                    ease: 'power3.out'
+                });
 
-        // 事件监听
-        nextBtn.addEventListener('click', () => navigate('next'));
-        prevBtn.addEventListener('click', () => navigate('prev'));
+                // 2. Animate the red text panel sliding in from the right
+                tl.from(slide.querySelector('.s3-text-panel'), {
+                    xPercent: 100, // Changed from -100 to 100
+                    duration: 1,
+                    ease: 'power3.inOut'
+                }, "-=0.8"); // Overlap for a smoother transition
 
-        document.addEventListener('keydown', (e) => {
-            if (e.key === 'ArrowRight' || e.key === ' ') {
-                e.preventDefault();
-                navigate('next');
-            } else if (e.key === 'ArrowLeft') {
-                e.preventDefault();
-                navigate('prev');
+                // 3. Animate the text content inside the red panel
+                tl.from(slide.querySelectorAll('.s3-text-panel h1, .s3-text-panel li'), {
+                    opacity: 0,
+                    x: 30, // Changed from -30 to 30
+                    stagger: 0.15,
+                    duration: 0.8
+                }, "-=0.7");
+            };
+            window.animate_techDetailHybrid = (tl, slide) => {
+                tl.from(slide.querySelectorAll('.text-content > *'), {
+                    x: (slide.style.flexDirection === 'row-reverse' ? 50 : -50),
+                    opacity: 0,
+                    stagger: 0.15,
+                    duration: 0.8,
+                    ease: 'power2.out'
+                });
+                tl.from(slide.querySelector('.main-diagram'), { scale: 0.8, opacity: 0, duration: 1, ease: 'expo.out' }, '-=0.6');
+                tl.from(slide.querySelectorAll('.diagram-box'), { scale: 0.5, opacity: 0, stagger: 0.2, duration: 0.7, ease: 'back.out(1.7)' }, '-=0.7');
+            };
+
+            window.animate_focusCards = (tl, slide) => {
+                // Set initial states
+                gsap.set(slide.querySelectorAll('.s6-card'), { y: 100, opacity: 0, scale: 0.9 });
+                gsap.set(slide.querySelectorAll('.s6-main-title span'), { y: '100%', opacity: 0 });
+                // Set the overlay to be invisible initially
+                gsap.set(slide.querySelector('.gradient-overlay'), { opacity: 0 });
+
+                // Animate the container's background color from white to the final solid red
+                tl.from(slide.querySelector('.s6-container'), {
+                    backgroundColor: '#F9F9F9',
+                    duration: 0.8,
+                    ease: 'power2.inOut'
+                });
+
+                // AT THE SAME TIME, fade in the gradient overlay
+                tl.to(slide.querySelector('.gradient-overlay'), {
+                    opacity: 0.21,
+                    duration: 1.2,
+                    ease: 'power2.inOut'
+                }, "<"); // "<" means start at the same time as the previous animation
+
+                // The rest of the content animation follows
+                tl.to(slide.querySelectorAll('.s6-main-title span'), { y: '0%', opacity: 1, stagger: 0.1, duration: 0.8, ease: 'power3.out' }, '-=1.0');
+                tl.to(slide.querySelectorAll('.s6-card'), { y: 0, opacity: 1, scale: 1, stagger: 0.2, duration: 1, ease: 'expo.out' }, '-=0.8');
+                tl.from(slide.querySelectorAll('.s6-card > *'), { y: 20, opacity: 0, stagger: 0.1, duration: 0.6, ease: 'power2.out' }, '-=0.8');
+            };
+            window.animate_bigStats = (tl, slide) => {
+                // 1. Animate the title in from the top
+                tl.from(slide.querySelector('.s7-main-title'), {
+                    y: -50,
+                    opacity: 0,
+                    duration: 0.8,
+                    ease: 'power2.out'
+                });
+
+                // 2. Animate the stats row
+                tl.from(slide.querySelector('.s7-stats-row'), {
+                    y: -30,
+                    opacity: 0,
+                    duration: 0.8
+                }, '-=0.6'); // Overlap slightly with the title animation
+
+                // 3. Animate the comparison row in from the bottom
+                tl.from(slide.querySelector('.s7-comparison-row'), {
+                    y: 50,
+                    opacity: 0,
+                    duration: 0.8
+                }, '-=0.6'); // Overlap as well
+            };
+            window.animate_gallery = (tl, slide) => {
+                tl.from(slide.querySelector('.s8-header'), { y: -50, opacity: 0, duration: 0.8 })
+                    .from(slide.querySelectorAll('.s8-item'), { y: 100, opacity: 0, stagger: 0.2, duration: 1, ease: 'expo.out' }, '-=0.5');
+            };
+            window.animate_tiltedHeader = (tl, slide) => {
+                tl.from(slide.querySelector('.s9-header-bg'), { scaleY: 0, transformOrigin: 'top', duration: 1, ease: 'power3.inOut' })
+                    .from(slide.querySelector('.s9-content h1'), { x: -100, opacity: 0, duration: 0.8 }, '-=0.5')
+                    .from(slide.querySelector('.s9-content ul'), { y: 100, opacity: 0, duration: 0.8 }, '-=0.5');
+            };
+            window.animate_final = (tl, slide) => {
+                tl.from(slide.querySelector('.s11-text'), { scale: 0.5, opacity: 0, duration: 1, ease: 'back.out(1.7)' })
+                    .from(slide.querySelector('.s11-subtext'), { y: 20, opacity: 0, duration: 0.5 }, '-=0.5');
+            };// 请将这个新函数添加到您文件中已有的其他 animate_... 函数旁边
+            window.animate_new1 = (tl, slide) => {
+                // Animate the main header (h1 and subtitle)
+                tl.from(slide.querySelectorAll('.new1-header h1, .new1-header p'), {
+                    y: -50,
+                    opacity: 0,
+                    duration: 0.8,
+                    stagger: 0.15 // Title and subtitle appear sequentially
+                });
+                // Animate the gallery items
+                tl.from(slide.querySelectorAll('.new1-item'), {
+                    y: 100,
+                    opacity: 0,
+                    stagger: 0.2,
+                    duration: 1,
+                    ease: 'expo.out'
+                }, '-=0.5');
+            };
+
+            function updateNavButtons() {
+                prevBtn.disabled = currentSlide === 0;
+                nextBtn.disabled = currentSlide === totalSlides - 1;
             }
+
+            // Event Listeners
+            nextBtn.addEventListener('click', () => { if (currentSlide < totalSlides - 1) goToSlide(currentSlide + 1); });
+            prevBtn.addEventListener('click', () => { if (currentSlide > 0) goToSlide(currentSlide - 1); });
+            document.addEventListener('keydown', (e) => {
+                if (e.key === 'ArrowRight' && currentSlide < totalSlides - 1) nextBtn.click();
+                else if (e.key === 'ArrowLeft' && currentSlide > 0) prevBtn.click();
+            });
+
+            // Initial setup
+            updateNavButtons();
+            updatePageNumber(0);
+            const firstAnimation = slides[0].dataset.animation;
+            const firstTl = gsap.timeline({ onComplete: () => { isAnimating = false; } });
+            isAnimating = true;
+            window[`animate_${firstAnimation}`](firstTl, slides[0]);
         });
-
-        // 初始化
-        slides[0].classList.add('active');
-        updateCounter();
-
     </script>
 </body>
 
