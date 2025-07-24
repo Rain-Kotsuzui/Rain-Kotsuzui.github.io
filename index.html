@@ -760,30 +760,16 @@
 </head>
 
 <body>
-    <div class="background-grid"></div>
-    <div class="page-number" id="page-number">01</div>
 
-    <div class="ppt-container">
-        <!-- Slide 1: Title -->
-        <section class="slide" data-animation="title">
-            <div class="s1-red-block"></div>
-            <div class="s1-container">
-                <div class="s1-title">
-                    <div class="line">
-                        <h2>可嵌入传统图形学渲染管线的</h2>
-                    </div>
-                    <div class="line">
-                        <h1>基于Transformer的</h1>
-                    </div>
-                    <div class="line">
-                        <h1>快速PBR渲染方案</h1>
-                    </div>
-                </div>
-                <div class="s1-subtitle">
-                    <p>一种面向下一代实时图形的AI加速范式探索</p>
-                </div>
-                <p class="s1-details">指导老师：袁春<br>助教：郑江茂 张洋 俞承霖<br>汇报人：苏世瑞, 李嘉祥 </p>
+    <canvas id="grid-canvas"></canvas>
+    <div class="presentation">
+        <!-- 幻灯片 1: 标题页 -->
+        <section class="slide" id="slide-1">
+            <div class="title-block">
+                <h3 class="animated fade-in-down">可嵌入传统图形渲染管线的</h3>
+                <h1 class="animated fade-in-down delay-1">基于Transformer的快速PBR渲染方案</h1>
             </div>
+            <h3 class="animated fade-in-up delay-2" style="margin-top: 5vh;">报告人：苏世瑞 李嘉祥</h3>
         </section>
 
         <!-- Slide 2: Background -->
