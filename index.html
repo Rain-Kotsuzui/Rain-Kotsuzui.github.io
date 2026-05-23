@@ -70,13 +70,13 @@
 
 <div id="stateIndicator">
     [ VJ CONTROL SYSTEM ]<br>
-    PRESS [1-5] KEY TO SWITCH STATES<br>
+    PRESS [1-6] KEY TO SWITCH STATES (HOLD [SHIFT] FOR INSTANT SWITCH)<br>
     HOLD [Q] KEY TO MANUALLY INVERT SCREEN<br>
     HOLD [W] KEY TO TRIGGER PIXEL STRETCH<br>
     HOLD [E] KEY TO TRIGGER PIXEL SORTING<br>
     HOLD [R] KEY TO TRIGGER RANDOM INVERT BLOCKS<br>
     HOLD [T] KEY TO TRIGGER BLOCK DISPLACEMENT<br><br>
-    CURRENT STATE: <span id="stateName" class="active-state">AMBIENT (极简空灵)</span>
+    CURRENT STATE: <span id="stateName" class="active-state">DECAY (落幕尾奏)</span>
 </div>
 
 <div id="uploadUI">
@@ -105,6 +105,7 @@
     let isEDown = false; 
     let isRDown = false; 
     let isTDown = false; 
+    let isShiftDown = false; 
 
     // UI 单词预览实时打字交互
     document.getElementById('textInput').addEventListener('input', function(e) {
@@ -113,11 +114,28 @@
     });
 
     // ==========================================
-    // 5 种 VJ 状态对应的底层参数配置表
+    // 6 种 VJ 状态对应的底层参数配置表
     // ==========================================
     const STATES = {
-        1: { // AMBIENT (极简空灵)
-            name: "1: AMBIENT (极简空灵)",
+        1: { // DECAY (落幕尾奏)
+            name: "1: DECAY (落幕尾奏)",
+            speedScale: 0.08,
+            warpScale: 2.2,
+            stripeBaseY: 0.55,
+            stripeAudioMult: 0.02,
+            fontBaseScale: 0.8,
+            fontAudioMult: 0.05,
+            waveBaseY: 19.5,
+            waveScale: 0.05,
+            waveAudioMult: 0.3,
+            waveOpacity: 0.12,
+            glitchAmount: 0.0,
+            textOpacityBase: 0.4,
+            textGlitchIntensity: 0.0,
+            textDisplaceIntensity: 0.02 
+        },
+        2: { // AMBIENT (极简空灵)
+            name: "2: AMBIENT (极简空灵)",
             speedScale: 0.15,          
             warpScale: 4.5,            
             stripeBaseY: 0.7,          
@@ -133,8 +151,8 @@
             textGlitchIntensity: 0.0,   
             textDisplaceIntensity: 0.0  
         },
-        2: { // RISING (蓄势上升)
-            name: "2: RISING (蓄势上升)",
+        3: { // RISING (蓄势上升)
+            name: "3: RISING (蓄势上升)",
             speedScale: 0.45,
             warpScale: 9.0,
             stripeBaseY: 0.95,
@@ -150,24 +168,7 @@
             textGlitchIntensity: 0.03,  
             textDisplaceIntensity: 0.12 
         },
-        3: { // CLIMAX (高潮闪烁) - speedScale 已平滑放慢，防眩晕
-            name: "3: CLIMAX (高潮闪烁)",
-            speedScale: 0.55,           
-            warpScale: 18.0,           
-            stripeBaseY: 0.0,          
-            stripeAudioMult: 0.0,      
-            fontBaseScale: 1.1,        
-            fontAudioMult: 0.7,        
-            waveBaseY: 14.0,           
-            waveScale: 1.5,            
-            waveAudioMult: 14.0,       
-            waveOpacity: 0.85,         
-            glitchAmount: 0.45,        
-            textOpacityBase: 1.0,
-            textGlitchIntensity: 0.15,  
-            textDisplaceIntensity: 0.65 
-        },
-        4: { // GLITCH (数字故障) - speedScale 已平滑放慢，防眩晕
+        4: { // GLITCH (数字故障)
             name: "4: GLITCH (数字故障)",
             speedScale: 0.65,
             warpScale: 21.0,
@@ -184,22 +185,39 @@
             textGlitchIntensity: 0.42,  
             textDisplaceIntensity: 1.15 
         },
-        5: { // DECAY (落幕尾奏)
-            name: "5: DECAY (落幕尾奏)",
-            speedScale: 0.08,
-            warpScale: 2.2,
-            stripeBaseY: 0.55,
-            stripeAudioMult: 0.02,
-            fontBaseScale: 0.8,
-            fontAudioMult: 0.05,
-            waveBaseY: 19.5,
-            waveScale: 0.05,
-            waveAudioMult: 0.3,
-            waveOpacity: 0.12,
-            glitchAmount: 0.0,
-            textOpacityBase: 0.4,
-            textGlitchIntensity: 0.0,
-            textDisplaceIntensity: 0.02 
+        5: { // CLIMAX (高潮平稳) - 无闪烁反色随机块
+            name: "5: CLIMAX (高潮平稳)",
+            speedScale: 0.55,           
+            warpScale: 18.0,           
+            stripeBaseY: 0.0,          
+            stripeAudioMult: 0.0,      
+            fontBaseScale: 1.1,        
+            fontAudioMult: 0.7,        
+            waveBaseY: 14.0,           
+            waveScale: 1.5,            
+            waveAudioMult: 14.0,       
+            waveOpacity: 0.85,         
+            glitchAmount: 0.45,        
+            textOpacityBase: 1.0,
+            textGlitchIntensity: 0.15,  
+            textDisplaceIntensity: 0.65 
+        },
+        6: { // CLIMAX (高潮闪烁) - 带闪烁反色随机块
+            name: "6: CLIMAX (高潮闪烁)",
+            speedScale: 0.55,           
+            warpScale: 18.0,           
+            stripeBaseY: 0.0,          
+            stripeAudioMult: 0.0,      
+            fontBaseScale: 1.1,        
+            fontAudioMult: 0.7,        
+            waveBaseY: 14.0,           
+            waveScale: 1.5,            
+            waveAudioMult: 14.0,       
+            waveOpacity: 0.85,         
+            glitchAmount: 0.45,        
+            textOpacityBase: 1.0,
+            textGlitchIntensity: 0.15,  
+            textDisplaceIntensity: 0.65 
         }
     };
 
@@ -209,6 +227,9 @@
 
     // 键盘物理按键事件监听
     window.addEventListener('keydown', (e) => {
+        if (e.key === 'Shift') {
+            isShiftDown = true;
+        }
         if (e.key === 'q' || e.key === 'Q') {
             isQDown = true;
         }
@@ -225,13 +246,28 @@
             isTDown = true;
         }
         
-        if (['1', '2', '3', '4', '5'].includes(e.key)) {
+        // 兼容 Shift 按住时，不同键盘布局由于符号产生 e.key 变更的问题（多重保底判定）
+        const digitCodes = ['Digit1', 'Digit2', 'Digit3', 'Digit4', 'Digit5', 'Digit6'];
+        const numKeys = ['1', '2', '3', '4', '5', '6'];
+        const shiftNumKeys = ['!', '@', '#', '$', '%', '^'];
+        
+        let selectedState = -1;
+        if (digitCodes.includes(e.code)) {
+            selectedState = digitCodes.indexOf(e.code) + 1;
+        } else if (numKeys.includes(e.key)) {
+            selectedState = parseInt(e.key);
+        } else if (shiftNumKeys.includes(e.key)) {
+            selectedState = shiftNumKeys.indexOf(e.key) + 1;
+        }
+
+        if (selectedState !== -1) {
             previousStateNum = activeStateNum;
-            activeStateNum = parseInt(e.key);
+            activeStateNum = selectedState;
             document.getElementById('stateName').innerText = STATES[activeStateNum].name;
             
-            const wasHidden = (previousStateNum === 3);
-            const isHidden = (activeStateNum === 3);
+            // 状态 5 和 状态 6 均执行材质状态更新
+            const wasHidden = (previousStateNum === 5 || previousStateNum === 6);
+            const isHidden = (activeStateNum === 5 || activeStateNum === 6);
             if (wasHidden !== isHidden) {
                 updateMaterialForState(activeStateNum);
             }
@@ -239,6 +275,9 @@
     });
 
     window.addEventListener('keyup', (e) => {
+        if (e.key === 'Shift') {
+            isShiftDown = false;
+        }
         if (e.key === 'q' || e.key === 'Q') {
             isQDown = false;
         }
@@ -339,7 +378,7 @@
                 // --- 1. 手动 T 键：全屏随机小块进行坐标错位 (Block Displacement) ---
                 vec2 blockShift = vec2(0.0);
                 if (manualDisplaceAmount > 0.01) {
-                    float displaceSpeed = 1.2 + manualDisplaceAmount * 3.3; // 调低错位帧率 (1.2Hz ~ 4.5Hz)，使其顿挫有力
+                    float displaceSpeed = 3.0; // 改为固定频率，消除因为 Uniform 渐变导致的相位快速扫过现象（快速闪烁）
                     float timeSeed = floor(time * displaceSpeed);
                     
                     for (int i = 0; i < 6; i++) {
@@ -409,7 +448,7 @@
                 
                 vec3 finalColor = vec3(cr.r, cg.g, cb.b);
                 
-                // --- 4. 状态 3：高频随机大块反色闪光效果 ---
+                // --- 4. 状态 6：高频随机大块反色闪光效果 (自动音乐高频触发) ---
                 if (invert > 0.01) {
                     float timeSeed = floor(time * 3.5); 
                     float shouldInvert = 0.0;
@@ -423,6 +462,7 @@
                         float rw = 0.25 + hash(vec2(seed, 3.3)) * 0.65;
                         float rh = 0.25 + hash(vec2(seed, 4.4)) * 0.65;
                         
+                        // 已修正此处的未定义变量 by 错误，替换为了 ry
                         float inBox = step(rx - rw * 0.5, uv.x) * step(uv.x, rx + rw * 0.5) *
                                       step(ry - rh * 0.5, uv.y) * step(uv.y, ry + rh * 0.5);
                         
@@ -435,9 +475,9 @@
                     finalColor = mix(finalColor, 1.0 - finalColor, shouldInvert);
                 }
 
-                // --- 5. 手动 R 键：动态随机反色色块（闪烁频率由当前状态决定，尺寸位置完全随机化） ---
+                // --- 5. 手动 R 键：动态随机反色色块（闪烁频率固定，尺寸位置完全随机化） ---
                 if (manualBlocksAmount > 0.01) {
-                    float blockSpeed = 1.5 + manualBlocksAmount * 4.0; // 调低频率 (1.5Hz ~ 5.5Hz)，增强定格卡顿感
+                    float blockSpeed = 3.5; // 改为固定频率，消除因为 Uniform 渐变导致的相位快速扫过现象（快速闪烁）
                     float timeSeed = floor(time * blockSpeed);
                     float shouldInvertBlock = 0.0;
                     
@@ -627,11 +667,11 @@
             }
         }
 
-        // 3. 2D 平面插值/瞬移控制：状态3、4不加平滑实行硬抖动，其他状态采用液体阻尼滑行
+        // 3. 2D 平面插值/瞬移控制：状态5、6和4不加平滑实行硬抖动，其他状态采用液体阻尼滑行
         const lerpFactor = 0.15; 
         for (let i = 0; i < textStates.length; i++) {
             const s = textStates[i];
-            if (activeStateNum === 3 || activeStateNum === 4) {
+            if (activeStateNum === 5 || activeStateNum === 6 || activeStateNum === 4) {
                 s.dx = s.targetDx;
                 s.dy = s.targetDy;
             } else {
@@ -683,10 +723,10 @@
     scene.add(textMesh);
 
     // ==========================================
-    // 动态切换材质混合模式（状态3隐藏白块，启用叠加模式）
+    // 动态切换材质混合模式（状态5、6隐藏白块，启用叠加模式）
     // ==========================================
     function updateMaterialForState(stateNum) {
-        if (stateNum === 3) {
+        if (stateNum === 5 || stateNum === 6) {
             stripeMesh.visible = false;
             axisLines.visible = false;
             differenceMaterial.blending = THREE.NormalBlending;
@@ -777,7 +817,8 @@
         // 平滑插值计算 (Lerp Engine)
         // ==========================================
         const targetParams = STATES[activeStateNum];
-        const lerpFactor = 0.04; 
+        // 如果按下了 Shift，插值参数设为 1.0（瞬间切换，无过渡）
+        const lerpFactor = isShiftDown ? 1.0 : 0.04; 
         for (let key in currentParams) {
             if (key !== 'name') {
                 currentParams[key] = THREE.MathUtils.lerp(currentParams[key], targetParams[key], lerpFactor);
@@ -812,10 +853,10 @@
         }
 
         // ==========================================
-        // 核心反色控制 (仅状态 3 关联超巨型高频随机反色闪烁)
+        // 核心反色控制 (仅状态 6 关联高频随机反色闪烁，状态 5 保持平稳)
         // ==========================================
         let targetInvert = 0.0;
-        if (activeStateNum === 3 && isPlaying) {
+        if (activeStateNum === 6 && isPlaying) {
             // 0.22 噪声门滤除微小高频，保证大闪动干脆有力
             if (snappyHighs > 0.22) {
                 targetInvert = Math.min((snappyHighs - 0.22) * 2.0, 1.0); 
@@ -857,9 +898,9 @@
         vjPass.uniforms["manualDisplaceAmount"].value = THREE.MathUtils.lerp(vjPass.uniforms["manualDisplaceAmount"].value, targetTDisplace, 0.22);
 
         // ==========================================
-        // 1. 黑色条带张开闭合 (非状态 3 时运行)
+        // 1. 黑色条带张开闭合 (非状态 5 和 6 时运行)
         // ==========================================
-        if (activeStateNum !== 3) {
+        if (activeStateNum !== 5 && activeStateNum !== 6) {
             const stripeScaleY = currentParams.stripeBaseY + (Math.sin(customTime * 0.4) * 0.015) + snappyBass * currentParams.stripeAudioMult;
             stripeMesh.scale.y = stripeScaleY;
         }
@@ -870,7 +911,7 @@
         waveMaterial.opacity = currentParams.waveOpacity; 
         const baselineY = currentParams.waveBaseY;
 
-        if (activeStateNum !== 3) {
+        if (activeStateNum !== 5 && activeStateNum !== 6) {
             axisPos[1] = baselineY;  axisPos[4] = baselineY;
             axisPos[7] = -baselineY; axisPos[10] = -baselineY;
             axisGeo.attributes.position.needsUpdate = true;
@@ -947,7 +988,7 @@
             }
             
             // 根据状态决定是否平滑跟随
-            if (activeStateNum === 3 || activeStateNum === 4) {
+            if (activeStateNum === 5 || activeStateNum === 6 || activeStateNum === 4) {
                 textMesh.position.x = textMeshTargetX;
                 textMesh.position.y = textMeshTargetY;
                 textMesh.position.z = textMeshTargetZ;
