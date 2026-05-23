@@ -1,1365 +1,1028 @@
 <!DOCTYPE html>
-<html lang="zh-CN">
-
+<html lang="zh">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>基于Transformer的快速PBR渲染方案</title>
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link
-        href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;600;800;900&family=Bai+Jamjuree:wght@600&display=swap"
-        rel="stylesheet">
-
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.11.4/gsap.min.js"></script>
-
+    <title>kasasakana</title>
     <style>
-        :root {
-            --main-red: #FF3B30;
-            --background-light: #F9F9F9;
-            --text-dark: #121212;
-            --text-muted: #888;
-            --grid-color: rgba(0, 0, 0, 0.05);
-        }
-
-        /* Base & Reset */
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-        }
-
-        body {
-            font-family: 'Poppins', sans-serif;
-            background-color: var(--background-light);
-            color: var(--text-dark);
-            overflow: hidden;
-            height: 100vh;
-        }
-
-        /* 请用下面的代码替换掉您文件中已有的 .background-grid 样式 */
-
-        .background-grid {
-            position: fixed;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            /* MODIFIED: 线条从 1px 加粗到 2px */
-            background-image:
-                linear-gradient(var(--grid-color) 5px, transparent 2px),
-                linear-gradient(90deg, var(--grid-color) 5px, transparent 2px);
-            background-size: 50px 50px;
-            z-index: -1;
-            opacity: 0.5;
-            /* NEW: 加入 subtle 的动画效果 */
-            animation: moveGrid 40s linear infinite;
-        }
-
-        .ppt-container {
-            position: relative;
-            width: 100vw;
-            height: 100vh;
-        }
-
-        .slide {
-            position: absolute;
-            width: 100%;
-            height: 100%;
-            display: flex;
-            overflow: hidden;
-            visibility: hidden;
-        }
-
-        .page-number {
-            position: fixed;
-            bottom: 40px;
-            left: 40px;
-            font-family: 'Bai Jamjuree', sans-serif;
-            font-size: 1.2rem;
-            font-weight: 600;
-            color: var(--text-muted);
-            z-index: 100;
-        }
-
-        .navigation {
-            position: fixed;
-            bottom: 30px;
-            right: 30px;
-            display: flex;
-            align-items: center;
-            z-index: 100;
-        }
-
-        .nav-btn {
-            background: #fff;
-            border: 1px solid #eee;
-            color: var(--text-dark);
-            font-size: 1.5rem;
-            width: 50px;
-            height: 50px;
-            border-radius: 50%;
-            cursor: pointer;
-            transition: all 0.3s;
-            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.05);
-        }
-
-        .nav-btn:hover {
-            background: var(--main-red);
-            color: white;
-            transform: scale(1.1);
-        }
-
-        .nav-btn:disabled {
-            opacity: 0.5;
-            cursor: not-allowed;
-        }
-
-        .image-placeholder {
-            width: 100%;
-            height: 100%;
-            background: #EAEAEA;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            flex-direction: column;
-            border-radius: 8px;
-            overflow: hidden;
-            border: 2px dashed #ccc;
-        }
-
-        .image-placeholder svg {
-            width: 50px;
-            height: 50px;
-            opacity: 0.5;
-            color: var(--text-muted);
-        }
-
-        .image-placeholder span {
-            margin-top: 1rem;
-            font-size: 1rem;
-            font-weight: 600;
-            color: var(--text-muted);
-        }
-
-        .highlight {
-            color: var(--main-red);
-            font-weight: 600;
-        }
-
-        /* Slide 1: Title */
-        /* Slide 1: Title */
-        .s1-container {
-            margin-top: 4%;
-            /* MODIFIED: Adjusted padding and added height for true vertical centering */
-            padding: 0 8vw;
-            display: flex;
-            flex-direction: column;
-            justify-content: center;
-            width: 100%;
-            height: 100%;
-        }
-
-        .s1-title .line {
-            overflow: hidden;
-        }
-
-        .s1-title h2 {
-            font-size: 2.5rem;
-            /* 比h1小一些 */
-            font-weight: 400;
-            /* 不用那么粗 */
-            color: var(--text-dark);
-            line-height: 1.3;
-            transform: translateY(100%);
-            /* 和h1一样的初始状态 */
-
-            text-shadow: 2px 2px 8px rgba(0, 0, 0, 0.5);
-        }
-
-        .s1-title h1 {
-            font-size: 4.5rem;
-            font-weight: 900;
-            line-height: 1.2;
-            transform: translateY(100%);
-
-            text-shadow: 2px 2px 8px rgba(0, 0, 0, 0.5);
-        }
-
-        .s1-subtitle {
-            font-size: 1.5rem;
-            color: var(--text-muted);
-            margin-top: 2rem;
-            overflow: hidden;
-        }
-
-        .s1-subtitle p {
-            transform: translateY(100%);
-        }
-
-        .s1-details {
-            margin-top: 5rem;
-            color: var(--text-muted);
-        }
-
-        .s1-red-block {
-            position: absolute;
-            top: 0;
-            right: 0;
-            width: 60%;
-            height: 100%;
-            background: var(--main-red);
-            transform: skewX(-15deg) translateX(50px);
-            transform-origin: bottom;
-        }
-
-        /* Slide 2: Split Screen */
-        .s2-red-side {
-            flex-basis: 45%;
-            background-color: var(--main-red);
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            padding: 5%;
-        }
-
-        .s2-white-side {
-            flex-basis: 55%;
-            padding: 6vw;
-            /* NEW: Add these properties for vertical centering */
-            display: flex;
-            flex-direction: column;
-            justify-content: center;
-        }
-
-        .s2-white-side h1 {
-            font-size: 3rem;
-            margin-bottom: 2rem;
-        }
-
-        .s2-white-side ul {
-            list-style: none;
-        }
-
-        .s2-white-side li {
-            margin-bottom: 1.5rem;
-            font-size: 1.2rem;
-            line-height: 1.6;
-        }
-
-        /* Slide 3: Overlapping Layout */
-        /* Slide 3: Vertical Architecture Layout (NEW GRAY THEME) */
-        .s3-new-container {
-            width: 100%;
-            height: 100%;
-            display: flex;
-            background-color: transparent;
-        }
-
-        .s3-image-panel {
-            flex-basis: 55%;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            padding: 4vw;
-        }
-
-        .s3-text-panel {
-            flex-basis: 45%;
-            /* MODIFIED: Changed background to a dark gray */
-            background-color: #2c2c2e;
-            /* A modern, dark gray color */
-            color: #f2f2f7;
-            /* A slightly off-white for better readability */
-            padding: 6vw;
-            display: flex;
-            flex-direction: column;
-            justify-content: center;
-        }
-
-        .s3-text-panel h1 {
-            font-size: 3.5rem;
-            margin-bottom: 2.5rem;
-            /* MODIFIED: Use red as the highlight color for the title */
-            color: var(--main-red);
-        }
-
-        .s3-text-panel ul {
-            list-style: none;
-        }
-
-        .s3-text-panel li {
-            font-size: 1.4rem;
-            line-height: 1.9;
-            margin-bottom: 2rem;
-            position: relative;
-            padding-left: 25px;
-        }
-
-        .s3-text-panel li::before {
-            content: '';
-            position: absolute;
-            left: 0;
-            top: 8px;
-            width: 5px;
-            height: 70%;
-            /* MODIFIED: The vertical line is now red for emphasis */
-            background-color: var(--main-red);
-            border-radius: 5px;
-        }
-
-        .s3-text-panel strong {
-            /* MODIFIED: Keywords are now highlighted in red */
-            color: var(--main-red);
-            font-weight: 600;
-            /* Adjusted for better harmony */
-        }
-
-        /* Slide 4 & 5 (Hybrid Layout) */
-        .tech-detail-slide {
-            width: 100%;
-            height: 100%;
-            padding: 8vw;
-            display: flex;
-            align-items: center;
-            gap: 5vw;
-        }
-
-        .tech-detail-slide .text-content {
-            flex: 0 0 40%;
-        }
-
-        .tech-detail-slide .text-content .eyebrow {
-            font-size: 3rem;
-            font-weight: 1000;
-            color: var(--main-red);
-            letter-spacing: 2px;
-            text-transform: uppercase;
-            margin-bottom: 0.5rem;
-        }
-
-        .tech-detail-slide .text-content h1 {
-            font-size: 3.5rem;
-            font-weight: 1000;
-            margin-bottom: 2rem;
-
-            text-shadow: 2px 2px 8px rgba(0, 0, 0, 0.5);
-        }
-
-        .tech-detail-slide .text-content p {
-            font-size: 1.2rem;
-            line-height: 1.8;
-            color: var(--text-muted);
-        }
-
-        .tech-detail-slide .diagram-content {
-            flex: 1;
-            position: relative;
-            height: 75vh;
-        }
-
-        .tech-detail-slide .main-diagram {
-            position: absolute;
-            top: 50%;
-            left: 50%;
-            transform: translate(-50%, -50%);
-            width: 70%;
-            height: 70%;
-        }
-
-        .tech-detail-slide .diagram-box {
-            position: absolute;
-            background: white;
-            border: 1px solid #eee;
-            border-radius: 8px;
-            padding: 1.2rem;
-            box-shadow: 0 10px 20px rgba(0, 0, 0, 0.05);
-            text-align: center;
-        }
-
-        .tech-detail-slide .diagram-box h3 {
-            font-size: 1rem;
-            margin-bottom: 0.5rem;
-        }
-
-        .tech-detail-slide .diagram-box p {
-            font-size: 0.8rem;
-            color: var(--text-muted);
-            line-height: 1.3;
-        }
-
-        /* Slide 6: Focus Cards Layout */
-
-        .s6-container {
-            width: 100%;
-            height: 100%;
-            background-color: #A31E17;
-            /* The final solid color background */
-            display: flex;
-            /* Changed from flex to grid for easier layering */
-            place-items: center;
-            gap: 4vw;
-            padding: 8vw;
-            position: relative;
-            /* Essential for the overlay */
-            overflow: hidden;
-            /* Good practice */
-        }
-
-        /* NEW: The gradient overlay div style */
-        .gradient-overlay {
-            position: absolute;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            background: radial-gradient(circle at top left, #ff6e6e 0%, #000000 120%);
-            z-index: 0;
-            /* Sits behind content */
-        }
-
-
-        /* Wrapper for all content to sit above the overlay and be centered */
-        .s6-content-wrapper {
-            position: relative;
-            z-index: 1;
-            width: 100%;
-            /* NEW: Use flexbox for vertical layout */
-            display: flex;
-            flex-direction: column;
-            /* Stack items vertically */
-            align-items: center;
-            /* Center items horizontally */
-        }
-
-        .s6-main-title {
-            font-size: 5.5rem;
-            font-weight: 800;
-            color: rgba(255, 255, 255, 0.8);
-            margin-bottom: 5vh;
-            /* Increase space between title and cards */
-            text-align: center;
-            /* Center the title text */
-        }
-
-        /* Container for the cards to use flexbox */
-        .s6-cards-container {
-            display: flex;
-            justify-content: center;
-            gap: 4vw;
-            width: 100%;
-            /* Ensure it takes full width of its parent */
-        }
-
-        .s6-card {
-            flex-basis: 45%;
-            max-width: 600px;
-            background: rgba(255, 255, 255, 0.05);
-            border: 1px solid rgba(255, 255, 255, 0.2);
-            border-radius: 12px;
-            padding: 3rem;
-            color: white;
-            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
-            backdrop-filter: blur(10px);
-        }
-
-        .s6-card .card-title {
-            font-size: 1.8rem;
-            font-weight: 600;
-            margin-bottom: 1.5rem;
-            display: flex;
-            align-items: center;
-        }
-
-        .s6-card .card-title svg {
-            width: 28px;
-            height: 28px;
-            margin-right: 1rem;
-            color: var(--main-red);
-            background: white;
-            border-radius: 50%;
-            padding: 5px;
-        }
-
-        .s6-card .card-content {
-            font-size: 1.2rem;
-            line-height: 1.8;
-            font-weight: 300;
-        }
-
-        .s6-card .card-solution {
-            margin-top: 2rem;
-            padding-top: 2rem;
-            border-top: 1px solid rgba(255, 255, 255, 0.2);
-            font-weight: 400;
-            font-size: 1.2rem;
-            flex-direction: row-reverse;
-        }
-
-        .solution-image {
-            flex-shrink: 0;
-            /* Prevent image from shrinking */
-            width: 80px;
-            height: 80px;
-        }
-
-        .card-solution p {
-            flex: 1;
-            /* Allow text to take the remaining space */
-            font-weight: 400;
-            font-size: 1.2rem;
-            line-height: 1.7;
-        }
-
-        .s6-card .highlight {
-            font-weight: 600;
-            background: white;
-            color: var(--main-red);
-            padding: 0.1em 0.4em;
-            border-radius: 4px;
-        }
-
-        /* Slide 7: Big Stats & Comparison */
-        .s7-container {
-            display: flex;
-            flex-direction: column;
-            justify-content: center;
-            align-items: center;
-            width: 100%;
-            padding: 6vw;
-        }
-
-        .s7-main-title {
-            font-size: 3.5rem;
-            font-weight: 800;
-            color: var(--text-dark);
-            margin-bottom: 5rem;
-            /* Creates space between title and stats */
-            text-align: center;
-        }
-
-        .s7-stats-row {
-            display: flex;
-            align-items: center;
-            gap: 4vw;
-            margin-bottom: 4rem;
-        }
-
-        .s7-stat-item .value {
-            font-size: 7rem;
-            font-weight: 800;
-            color: var(--main-red);
-            line-height: 1;
-        }
-
-        .s7-stat-item .label {
-            font-size: 1.3rem;
-            margin-top: 1rem;
-            text-align: center;
-        }
-
-        .s7-stat-item .old-value {
-            text-decoration: line-through;
-            color: var(--text-muted);
-            font-size: 4rem;
-        }
-
-        .s7-arrow {
-            font-size: 3rem;
-            color: var(--text-muted);
-        }
-
-        .s7-comparison-row {
-            display: flex;
-            width: 100%;
-            max-width: 1200px;
-            gap: 3vw;
-        }
-
-        .s7-comparison-item {
-            flex: 1;
-            text-align: center;
-        }
-
-        .s7-comparison-item h2 {
-            margin-bottom: 1rem;
-        }
-
-        .s7-comparison-item .image-wrapper {
-            height: 35vh;
-            border: 1px solid #eee;
-            border-radius: 8px;
-        }
-
-        /* Slide 8: Gallery */
-        .s8-container {
-            width: 100%;
-            display: flex;
-            flex-direction: column;
-            padding: 6vw 8vw;
-        }
-
-        .s8-header {
-            text-align: center;
-            margin-bottom: 4rem;
-        }
-
-        .s8-header h1 {
-            font-size: 3rem;
-        }
-
-        .s8-header p {
-            font-size: 1.2rem;
-            color: var(--text-muted);
-        }
-
-        .s8-gallery {
-            display: flex;
-            gap: 2vw;
-            width: 100%;
-        }
-
-        .s8-item {
-            flex: 1;
-            text-align: center;
-        }
-
-        .s8-item .image-wrapper {
-            height: 45vh;
-            margin-bottom: 1.5rem;
-        }
-
-        .s8-item .caption {
-            font-weight: 600;
-        }
-
-        /* Slide 9 & 10: Tilted Header Layout */
-        .s9-container {
-            width: 100%;
-            height: 100%;
-            position: relative;
-        }
-
-        .s9-header-bg {
-            position: absolute;
-            top: 0;
-            left: 0;
-            width: 120%;
-            height: 50%;
-            background: var(--main-red);
-            transform: rotate(-5deg) translate(-10%, -25%);
-            z-index: 0;
-        }
-
-        .s9-content {
-            position: relative;
-            z-index: 1;
-            padding: 8vw;
-        }
-
-        .s9-content h1 {
-            font-size: 3.5rem;
-            color: white;
-            margin-bottom: 4rem;
-        }
-
-        .s9-content ul {
-            background: white;
-            padding: 3rem;
-            border-radius: 8px;
-            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.1);
-        }
-
-        .s9-content h2 {
-            font-size: 1.5rem;
-            color: var(--main-red);
-            margin-bottom: 1rem;
-        }
-
-        .s9-content li {
+        body { margin: 0; overflow: hidden; background-color: #000; color: #fff; font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; user-select: none; }
+        
+        #uploadUI { 
+            position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); 
+            text-align: center; z-index: 20; transition: opacity 0.5s; 
+            background: #000; padding: 50px; border-radius: 0px; 
+            border: 3px solid #fff;
+            box-shadow: 8px 8px 0px #ff0033;
+        }
+        #uploadUI h1 { font-size: 2.2rem; font-weight: 900; letter-spacing: 8px; color: #fff; margin-bottom: 25px; }
+        
+        /* Brutalist 赛博文本输入框 */
+        .text-input-field {
+            background: #000;
+            color: #fff;
+            border: 2px solid #fff;
+            padding: 12px;
             font-size: 1.1rem;
-            list-style: none;
-            margin-bottom: 1rem;
-        }
-
-        /* Slide 11 & 12: Final */
-        .s11-container {
-            width: 100%;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            flex-direction: column;
-        }
-
-        .s11-text {
-            font-size: 8rem;
-            font-weight: 800;
-            color: var(--main-red);
-        }
-
-        .s11-subtext {
-            font-size: 1.5rem;
-            color: var(--text-muted);
-        }
-
-        /* NEW Slide 7: Training Process (Unique Classes) */
-        .new1-container {
-            width: 100%;
-            display: flex;
-            flex-direction: column;
-            padding: 6vw 8vw;
-        }
-
-        .new1-header {
+            font-family: 'Courier New', Courier, monospace;
             text-align: center;
-            margin-bottom: 4rem;
+            text-transform: uppercase;
+            width: 260px;
+            outline: none;
+            border-radius: 0px;
+            caret-color: #ff0033;
+            margin-bottom: 25px;
+            transition: all 0.2s;
+        }
+        .text-input-field:focus {
+            border-color: #ff0033;
+            box-shadow: 5px 5px 0px #fff;
         }
 
-        .new1-header h1 {
-            font-size: 3.5rem;
+        .btn { 
+            display: inline-block; padding: 15px 40px; background: transparent; color: #fff; 
+            font-size: 1.1rem; font-weight: bold; cursor: pointer; border-radius: 0px; 
+            border: 2px solid #fff; transition: all 0.2s; text-transform: uppercase;
         }
+        .btn:hover { background: #ff0033; border-color: #ff0033; box-shadow: 5px 5px 0px #fff; }
+        input[type="file"] { display: none; }
 
-        .new1-header p {
-            font-size: 1.4rem;
-            color: var(--text-muted);
-            margin-top: 1rem;
-            max-width: 60ch;
-            margin-left: auto;
-            margin-right: auto;
+        /* 左上角极简状态提示面板 */
+        #stateIndicator {
+            position: absolute; top: 25px; left: 25px; z-index: 30;
+            font-family: 'Courier New', Courier, monospace; font-size: 0.8rem;
+            color: #666; letter-spacing: 2px; line-height: 1.6; pointer-events: none;
         }
-
-        .new1-gallery {
-            display: flex;
-            gap: 2vw;
-            width: 100%;
-        }
-
-        .new1-item {
-            flex: 1;
-            text-align: center;
-        }
-
-        .new1-item .image-wrapper {
-            /* We can reuse the generic .image-wrapper style */
-            height: 45vh;
-            margin-bottom: 1.5rem;
-        }
-
-        .new1-caption {
-            font-weight: 600;
-            font-size: 1.3rem;
-        }
-
-        @keyframes moveGrid {
-            from {
-                background-position: 0 0;
-            }
-
-            to {
-                /* 移动一个网格单元的距离 (50px, 50px) 来实现无缝循环 */
-                background-position: 1000px 1000px;
-            }
-        }
+        #stateIndicator span { color: #fff; font-weight: bold; }
+        #stateIndicator .active-state { color: #ff1133; font-weight: 900; }
+        
+        canvas { display: block; }
     </style>
+    <script type="importmap">
+        {
+            "imports": {
+                "three": "https://unpkg.com/three@0.158.0/build/three.module.js",
+                "three/addons/": "https://unpkg.com/three@0.158.0/examples/jsm/"
+            }
+        }
+    </script>
 </head>
-
 <body>
-    <div class="background-grid"></div>
-    <div class="page-number" id="page-number">01</div>
 
-    <div class="ppt-container">
-        <!-- Slide 1: Title -->
-        <section class="slide" data-animation="title">
-            <div class="s1-red-block"></div>
-            <div class="s1-container">
-                <div class="s1-title">
-                    <div class="line">
-                        <h2>可嵌入传统图形学渲染管线的</h2>
-                    </div>
-                    <div class="line">
-                        <h1>基于Transformer的</h1>
-                    </div>
-                    <div class="line">
-                        <h1>快速PBR渲染方案</h1>
-                    </div>
-                </div>
-                <div class="s1-subtitle">
-                    <p>一种面向下一代实时图形的AI加速范式探索</p>
-                </div>
-                <p class="s1-details">指导老师：袁春<br>助教：郑江茂 张洋 俞承霖<br>汇报人：苏世瑞, 李嘉祥 </p>
-            </div>
-        </section>
+<div id="stateIndicator">
+    [ VJ CONTROL SYSTEM ]<br>
+    PRESS [1-5] KEY TO SWITCH STATES<br>
+    HOLD [Q] KEY TO MANUALLY INVERT SCREEN<br>
+    HOLD [W] KEY TO TRIGGER PIXEL STRETCH<br>
+    HOLD [E] KEY TO TRIGGER PIXEL SORTING<br>
+    HOLD [R] KEY TO TRIGGER RANDOM INVERT BLOCKS<br>
+    HOLD [T] KEY TO TRIGGER BLOCK DISPLACEMENT<br><br>
+    CURRENT STATE: <span id="stateName" class="active-state">AMBIENT (极简空灵)</span>
+</div>
 
-        <!-- Slide 2: Background -->
-        <!-- Slide 2: Background -->
-        <section class="slide" data-animation="split">
-            <div class="s2-red-side">
-                <div class="image-placeholder"
-                    style="background-image: url('final/1.png'); background-size: cover; background-position: center; border: none;">
-                </div>
-            </div>
-            <div class="s2-white-side">
-                <!-- The content inside this div will now be vertically centered -->
-                <div>
-                    <h1>研究背景</h1>
-                    <ul>
-                        <li><strong>“光” | 物理真实感:</strong> PBR通过模拟真实世界的光线物理传播，是创造顶级视觉沉浸感的黄金标准，被广泛应用于电影、游戏和工业设计领域。</li>
-                        <li><strong>“影” | 高昂时间成本:</strong> 其核心技术，蒙特卡洛路径追踪，为追求无噪点的真实效果，需要进行海量光线采样，导致渲染时间极长（我们的基准为<span
-                                class="highlight">30秒/帧</span>），成为实时交互应用的性能瓶颈。</li>
-                        <li><strong>核心问题:</strong> 我们能否利用深度学习的强大推理能力，来近似这一复杂耗时的渲染过程，从而在保证高质量视觉效果的前提下，将渲染速度提升一个<span
-                                class="highlight">数量级</span>，从根本上解决质量与速度的矛盾？</li>
-                    </ul>
-                </div>
-            </div>
-        </section>
-
-        <!-- Slide 3: Overall Architecture -->
-        <!-- Slide 3: Overall Architecture (REVERSED VERTICAL LAYOUT) -->
-        <section class="slide" data-animation="verticalArch">
-            <div class="s3-new-container">
-                <!-- Left side: Image Panel -->
-                <div class="s3-image-panel">
-                    <img src="final/3.png" alt="Overall Architecture" style="width: auto; height: 120%;">
-                </div>
-                <!-- Right side: Text Panel with Red Background -->
-                <div class=" s3-text-panel">
-                    <h1>整体架构</h1>
-                    <ul>
-                        <li>
-                            <strong>Scene Transformer:</strong>
-                            负责编码整个场景的几何与材质信息，形成对3D世界全局的、深度的上下文理解。
-                        </li>
-                        <li>
-                            <strong>View Transformer:</strong>
-                            接收特定视角的相机射线，并与场景上下文进行高效的交叉注意力交互，查询出每个像素应有的颜色信息。
-                        </li>
-                        <li>
-                            <strong>DPT Decoder:</strong>
-                            将View Transformer输出的多尺度特征图进行上采样和融合，最终重建出高清、细节丰富的最终渲染图像。
-                        </li>
-                    </ul>
-                </div>
-            </div>
-        </section>
-
-        <!-- Slide 4: Scene Transformer Hybrid Detail -->
-        <section class="slide" data-animation="techDetailHybrid">
-            <div class="tech-detail-slide">
-                <div class="text-content">
-                    <div class="eyebrow">模块一</div>
-                    <h1>Scene Transformer</h1>
-                    <p>将无序的三角面片集合，编码为包含全局几何信息的<strong class="highlight">场景Tokens</strong>。这是模型理解“世界是什么样”的第一步。</p>
-                </div>
-                <div class="diagram-content">
-                    <div class="main-diagram">
-                        <img src="final/ST.png" alt="Overall Architecture" style="width: auto; height: 120%;">
-                    </div>
-                    <div class="diagram-box" style="bottom: -50px; right: -20px; width: 200px;">
-                        <h3>三角面片输入</h3>
-                        <p>Mesh Data (v1, v2, v3)</p>
-                    </div>
-                    <div class="diagram-box" style="top: 58%; left: 0%; transform: translateY(-50%); width: 220px;">
-                        <h3>RoPE 编码</h3>
-                        <p>保留相对空间位置</p>
-                    </div>
-                    <div class="diagram-box" style="bottom: 600px; right: -10px; width: 200px;">
-                        <h3>Scene Tokens 输出</h3>
-                        <p>8层MHSA提取特征</p>
-                    </div>
-                </div>
-            </div>
-        </section>
-
-        <!-- Slide 5: View Transformer Hybrid Detail -->
-        <section class="slide" data-animation="techDetailHybrid">
-            <div class="tech-detail-slide" style="flex-direction: row-reverse;">
-                <div class="text-content">
-                    <div class="eyebrow">模块二</div>
-                    <h1>View Transformer</h1>
-                    <p>将每个像素的<strong class="highlight">射线(Query)</strong>与全局的<strong
-                            class="highlight">场景(Key/Value)</strong>进行深度交互，计算出最终颜色。这是“看”向场景并“画”出图像的核心。</p>
-                </div>
-                <div class="diagram-content">
-                    <div class="main-diagram">
-                        <img src="final/VT.png" alt="Overall Architecture" style="width: auto; height: 120%;">
-                    </div>
-                    <div class="diagram-box" style="bottom: -8%; left: 50%; width: 200px;">
-                        <h3>Ray Tokens (Query)</h3>
-                        <p>每个像素的观察射线</p>
-                    </div>
-                    <div class="diagram-box" style="bottom: 50px; left: 0%; width: 200px;">
-                        <h3>Scene Tokens (K/V)</h3>
-                        <p>来自上一模块</p>
-                    </div>
-                    <div class="diagram-box" style="bottom: 50%; left: 20%; transform: translateX(-50%); width: 280px;">
-                        <h3>交叉注意力 (12层)</h3>
-                        <p>射线“查询”场景，获取渲染信息</p>
-                    </div>
-
-                    <div class="diagram-box" style="top: 0%; right: -25%; transform: translateX(-50%); width: 280px;">
-                        <h3>DPTDecoder</h3>
-                        <p>提取不同中间层共同解码输出</p>
-                    </div>
-                </div>
-            </div>
-        </section>
-
-        <!-- Slide 6: Challenges -->
-        <section class="slide" data-animation="focusCards">
-            <div class="s6-container">
-                <div class="gradient-overlay"></div>
-                <div class="s6-content-wrapper">
-                    <div class="s6-main-title"><span>挑</span><span>战</span><span>与</span><span>对</span><span>策</span>
-                    </div>
-                    <div class="s6-cards-container">
-                        <div class="s6-card">
-                            <div class="card-title"><svg xmlns="http://www.w3.org/2000/svg" fill="none"
-                                    viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
-                                    <path stroke-linecap="round" stroke-linejoin="round"
-                                        d="M20.25 6.375c0 2.278-3.694 4.125-8.25 4.125S3.75 8.653 3.75 6.375m16.5 0c0-2.278-3.694-4.125-8.25-4.125S3.75 4.097 3.75 6.375m16.5 0v11.25c0 2.278-3.694 4.125-8.25 4.125s-8.25-1.847-8.25-4.125V6.375m16.5 0v3.75m-16.5-3.75v3.75m16.5 0v3.75C20.25 16.153 16.556 18 12 18s-8.25-1.847-8.25-4.125v-3.75m16.5 0c0 2.278-3.694 4.125-8.25 4.125s-8.25-1.847-8.25-4.125" />
-                                </svg>挑战一：高质量数据稀缺</div>
-                            <div class="card-content">要训练一个泛化能力强的神经渲染器，需要海量且多样化的“场景-图像”配对数据，而现有公开数据集难以满足我们的特定需求。</div>
-                            <!-- MODIFIED STRUCTURE BELOW -->
-                            <div class="card-solution">
-
-                                <p><strong>对策：</strong> 我们自主搭建了基于Blender的自动化数据生成管线，程序化地生成了包含数千个高质量配对数据。</p>
-                            </div>
-                        </div>
-                        <div class="s6-card">
-                            <div class="card-title"><svg xmlns="http://www.w3.org/2000/svg" fill="none"
-                                    viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
-                                    <path stroke-linecap="round" stroke-linejoin="round"
-                                        d="M3.75 3v11.25A2.25 2.25 0 006 16.5h2.25M3.75 3h-1.5m1.5 0h16.5m0 0h1.5m-1.5 0v11.25A2.25 2.25 0 0118 16.5h-2.25m-7.5 0h7.5m-7.5 0l-1.125-1.5M15 12l-1.5 1.5m0 0l-1.5-1.5M15 12l1.5 1.5m0 0l1.5-1.5M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5M16.5 12l-1.5 1.5m0 0l-1.5-1.5m1.5 1.5l1.5 1.5m0 0l1.5-1.5" />
-                                </svg>挑战二：巨型模型与训练开销</div>
-                            <div class="card-content">我们模型的<span
-                                    class="highlight">5亿</span>参数量虽然强大，但也带来了巨大的显存占用和漫长的训练周期，严重影响了实验迭代的效率。</div>
-                            <!-- MODIFIED STRUCTURE BELOW -->
-                            <div class="card-solution">
-                                <p><strong>对策：</strong> 全面采用混合精度训练（FP16），在不牺牲模型精度的前提下，大幅降低了显存占用并加速了训练进程。</p>
-                            </div>
-                        </div>
-
-                    </div>
-                </div>
-            </div>
-        </section>
-
-        <!-- NEW Slide 7: Training Process -->
-        <section class="slide" data-animation="new1">
-            <div class="new1-container">
-                <div class="new1-header">
-                    <h1>训练过程可视化</h1>
-                    <p>在 <span class="highlight">L1 + 0.5 * LPIPS</span> 复合损失函数的引导下，模型从随机噪声开始，逐步学习并重建出清晰、真实的图像。</p>
-                </div>
-                <div class="new1-gallery">
-                    <div class="new1-item">
-                        <div class="image-wrapper">
-                            <img src="final/epoch_left.png" style="width: auto; height: 100%;">
-                        </div>
-                        <div class="new1-caption">Epoch = 20 (初步轮廓)</div>
-                    </div>
-                    <div class="new1-item">
-                        <div class="image-wrapper">
-                            <img src="final/epoch_mid.png" style="width: auto; height: 100%;">
-                        </div>
-                        <div class="new1-caption">Epoch = 100 (结构与光照)</div>
-                    </div>
-                    <div class="new1-item">
-                        <div class="image-wrapper">
-                            <img src="final/epoch_right.png" style="width: auto; height: 100%;">
-                        </div>
-                        <div class="new1-caption">Epoch = 400 (细节收敛)</div>
-                    </div>
-                </div>
-            </div>
-        </section>
-
-        <!-- Slide 7: Results -->
-        <section class="slide" data-animation="bigStats">
-            <div class="s7-container">
-                <h1 class="s7-main-title">实验结果与对比</h1>
-
-                <div class="s7-stats-row">
-                    <div class="s7-stat-item">
-                        <div class="old-value">30s</div>
-                        <div class="label">Cycles渲染器</div>
-                    </div>
-                    <div class="s7-arrow">→</div>
-                    <div class="s7-stat-item">
-                        <div class="value">3s</div>
-                        <div class="label">我们的模型</div>
-                    </div>
-                    <div class="s7-stat-item" style="border-left: 2px solid #ddd; padding-left: 4vw;">
-                        <div class="value">10X</div>
-                        <div class="label">速度提升</div>
-                    </div>
-                </div>
-                <div class="s7-comparison-row">
-                    <div class="s7-comparison-item">
-                        <h2>Cycles 渲染 (Ground Truth)</h2>
-                        <div class="image-wrapper">
-                            <img src="final/nailong-cycles.png" style="width: auto; height: 100%;">
-                        </div>
-                    </div>
-                    <div class="s7-comparison-item">
-                        <h2>我们的模型渲染</h2>
-                        <div class="image-wrapper">
-                            <img src="final/nailong.png" style="width: auto; height: 100%;">
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </section>
-
-        <!-- Slide 8: Generalization -->
-        <section class="slide" data-animation="gallery">
-            <div class="s8-container">
-                <div class="s8-header">
-                    <h1>核心优势：数据驱动的泛化能力</h1>
-                    <p>我们的框架是一个<span class="highlight">通用的图形合成器</span></p>
-                </div>
-                <div class="s8-gallery">
-                    <div class="s8-item">
-                        <div class="image-wrapper">
-                            <div class="image-placeholder"
-                                style="background-image: url('final/4.png'); background-size: cover; background-position: center; border: none;">
-                            </div>
-                        </div>
-                        <div class="caption">PBR风格输出</div>
-                    </div>
-                    <div class="s8-item">
-                        <div class="image-wrapper">
-                            <div class="image-placeholder"
-                                style="background-image: url('final/5.png'); background-size: cover; background-position: center; border: none;">
-                            </div>
-                        </div>
-                        <div class="caption">卡通风格输出</div>
-                    </div>
-                    <div class="s8-item">
-                        <div class="image-wrapper">
-                            <div class="image-placeholder"
-                                style="background-image: url('final/6.png'); background-size: cover; background-position: center; border: none;">
-                            </div>
-                        </div>
-                        <div class="caption">水墨风格输出</div>
-                    </div>
-                </div>
-            </div>
-        </section>
-        <!-- Slide 9: Conclusion -->
-        <section class="slide" data-animation="tiltedHeader">
-            <div class="s9-container">
-                <div class="s9-header-bg"></div>
-                <div class="s9-content">
-                    <h1>总结与局限性</h1>
-                    <ul>
-                        <li>
-                            <h2>工作总结与核心贡献</h2>
-                            <p style="font-size: 1.3rem; line-height: 1.9;">
-                                本项目成功设计并实现了一种新颖的、可嵌入传统图形管线的<strong
-                                    class="highlight">双Transformer快速PBR渲染方案</strong>。我们通过创新的<strong
-                                    class="highlight">RoPE几何编码</strong>与场景-视图解耦架构，验证了利用序列模型直接从场景几何生成高质量渲染图像的可行性。实验证明，该方案在保持高视觉保真度的同时，实现了相较于传统路径追踪<strong
-                                    class="highlight">10倍</strong>的渲染速度提升，为实时图形领域的AI加速提供了一种有价值的新范式。
-                            </p>
-                        </li>
-                        <li style="margin-top:2.5rem">
-                            <h2>坦诚局限与未来挑战</h2>
-                            <p style="font-size: 1.3rem; line-height: 1.9;">
-                                尽管成果显著，我们仍清醒认识到当前方案的局限性：
-                                <br><strong>1. 模型规模：</strong> <strong
-                                    class="highlight">5亿</strong>参数量导致巨大的存储和计算开销，是部署到消费级硬件的主要障碍。
-                                <br><strong>2. 效果边界：</strong> 模型对训练数据中少见的高频物理效应，如<strong
-                                    class="highlight">焦散、多次镜面反射和复杂折射</strong>等现象的模拟能力尚有不足。
-                                <br><strong>3. 性能瓶颈：</strong>
-                                虽然实现了数量级加速，但3秒/帧的渲染速度距离真正的实时应用（如33ms/帧）仍有较大差距，需进一步的算法与工程优化。
-                            </p>
-                        </li>
-                    </ul>
-                </div>
-            </div>
-        </section>
-        <!-- Slide 10: Future Work --><!-- Slide 10: Future Work -->
-        <section class="slide" data-animation="tiltedHeader">
-            <div class="s9-container">
-                <div class="s9-header-bg" style="background: #212121;"></div>
-                <div class="s9-content">
-                    <h1>未来方向</h1>
-                    <ul style="font-size: 1.2rem; line-height: 1.8;">
-                        <li>
-                            <h2>近期目标：模型效果与泛化性增强</h2>
-                            <p style="padding-left: 1.5rem; border-left: 3px solid var(--main-red);">
-                                <strong>扩展数据集：</strong> 进一步丰富我们的自建数据集，系统性地加入包含复杂光学现象（如透明材质的折射、金属的高光反射、次表面散射等）的场景。
-                                <br><strong>提升效果上限：</strong>
-                                针对当前模型的短板，研究引入更精细的BRDF参数作为条件输入，或设计专门的网络模块与损失函数，以提升对焦散等高频物理效应的模拟能力。
-                            </p>
-                        </li>
-                        <li style="margin-top:2rem">
-                            <h2>中期核心：性能优化与实时化部署</h2>
-                            <p style="padding-left: 1.5rem; border-left: 3px solid var(--main-red);">
-                                <!-- MODIFIED TEXT BELOW -->
-                                <strong>算法层面优化：</strong> 探索并引入前沿的Efficient Transformer架构（如Performer,
-                                Linformer等），它们通过近似注意力机制，可将Transformer的计算复杂度从<strong
-                                    class="highlight">O(N²)降低到O(N)</strong>。这将从根本上、数量级地加速模型的推理速度。
-                                <br><strong>工程层面压缩：</strong> 在算法优化的基础上，进一步应用<strong
-                                    class="highlight">知识蒸馏</strong>、<strong class="highlight">网络剪枝</strong>与<strong
-                                    class="highlight">权重 量化</strong>等压缩技术，最终目标是在主流消费级GPU上，将渲染速度推向<strong
-                                    class="highlight">实时（>30 FPS）</strong>的性能标准。
-                            </p>
-                        </li>
-                        <li style="margin-top:2rem">
-                            <h2>远期愿景：交互式与可控神经渲染</h2>
-                            <p style="padding-left: 1.5rem; border-left: 3px solid var(--main-red);">
-                                <strong>实现可控编辑：</strong> 探索将光照参数（如光源位置、强度、颜色）和材质属性作为模型的动态条件输入，实现对渲染结果的<strong
-                                    class="highlight">实时交互式编辑</strong>。
-                                <br><strong>赋能创意流程：</strong>
-                                最终愿景是打造一个能无缝集成到现代设计与游戏引擎中的AI渲染插件，为艺术家和设计师提供前所未有的创作效率与自由度，真正实现“所思即所见”。
-                            </p>
-                        </li>
-                    </ul>
-                </div>
-            </div>
-        </section>
-
-        <!-- Slide 11: Thanks -->
-        <section class="slide" data-animation="final">
-            <div class="s11-container">
-                <div class="s11-text">Thank You</div>
-                <!-- MODIFIED TEXT BELOW -->
-                <p class="s11-subtext" style="line-height: 1.8;">
-                    衷心感谢袁春老师的悉心指导<br>以及郑江茂、张洋、俞承霖助教在项目过程中的宝贵帮助！
-                </p>
-            </div>
-        </section>
-        <!-- NEW Slide 12: References -->
-        <section class="slide" data-animation="tiltedHeader">
-            <div class="s9-container">
-                <!-- Using a neutral dark grey for the header -->
-                <div class="s9-header-bg" style="background: #333333;"></div>
-                <div class="s9-content">
-                    <h1>参考文献</h1>
-                    <!-- Using a smaller font size and more line height for readability -->
-                    <ul style="font-size: 1.1rem; line-height: 2.2; max-width: 80ch;">
-                        <li>Mildenhall B, Srinivasan P P, Tancik M, et al. NeRF: Representing Scenes as Neural Radiance
-                            Fields for View Synthesis [EB/OL]. arXiv, 2020 08 03 </li>
-                        <li>Su, J., et al. (2021). "RoFormer: Enhanced Transformer with Rotary Position Embedding".</li>
-                        <li>Dao T, Fu D Y, Ermon S, et al. FlashAttention: Fast and Memory-Efficient Exact Attention
-                            with IO-Awareness [EB/OL]. arXiv, 2022 06 23 </li>
-                        <li> Katharopoulos A, Vyas A, Pappas N, et al. Transformers are RNNs: Fast Autoregressive
-                            Transformers with Linear Attention [EB/OL]. arXiv, 2020 08 31 </li>
-                        <!-- 您可以在这里继续添加更多参考文献 -->
-                    </ul>
-                </div>
-            </div>
-        </section>
-        <!-- Slide 13: Q&A -->
-        <section class="slide" data-animation="final">
-            <div class="s11-container">
-                <div class="s11-text">Q & A</div>
-                <div class="s11-subtext">敬请提问</div>
-            </div>
-        </section>
-
+<div id="uploadUI">
+    <h1 id="uiTitle">kasasakana</h1>
+    <div>
+        <input type="text" id="textInput" value="kasasakana" maxlength="15" placeholder="ENTER WORD" class="text-input-field">
     </div>
+    <label class="btn">
+        START VJ LOOP
+        <input type="file" id="audioInput" accept="audio/*">
+    </label>
+</div>
 
-    <div class="navigation">
-        <button class="nav-btn" id="prev-btn">←</button>
-        <button class="nav-btn" id="next-btn">→</button>
-    </div>
+<script type="module">
+    import * as THREE from 'three';
+    import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
+    import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
+    import { ShaderPass } from 'three/addons/postprocessing/ShaderPass.js';
 
-    <script>
-        document.addEventListener('DOMContentLoaded', () => {
-            const slides = document.querySelectorAll('.slide');
-            const nextBtn = document.getElementById('next-btn');
-            const prevBtn = document.getElementById('prev-btn');
-            const pageNumber = document.getElementById('page-number');
-            let currentSlide = 0;
-            let isAnimating = false;
-            const totalSlides = slides.length;
+    let audioCtx, analyser, dataArray;
+    let timeDataArray = new Uint8Array(128); 
+    let isPlaying = false;
+    let maxBassMemory = 0.1; 
+    let isQDown = false; 
+    let isWDown = false; 
+    let isEDown = false; 
+    let isRDown = false; 
+    let isTDown = false; 
 
-            gsap.set(slides, { autoAlpha: 0 });
-            gsap.set(slides[0], { autoAlpha: 1 });
+    // UI 单词预览实时打字交互
+    document.getElementById('textInput').addEventListener('input', function(e) {
+        const val = e.target.value.toUpperCase();
+        document.getElementById('uiTitle').innerText = val || "kasasakana";
+    });
 
-            function updatePageNumber(index) {
-                pageNumber.textContent = (index + 1).toString().padStart(2, '0');
+    // ==========================================
+    // 5 种 VJ 状态对应的底层参数配置表
+    // ==========================================
+    const STATES = {
+        1: { // AMBIENT (极简空灵)
+            name: "1: AMBIENT (极简空灵)",
+            speedScale: 0.15,          
+            warpScale: 4.5,            
+            stripeBaseY: 0.7,          
+            stripeAudioMult: 0.08,     
+            fontBaseScale: 0.9,        
+            fontAudioMult: 0.15,       
+            waveBaseY: 18.0,           
+            waveScale: 0.2,            
+            waveAudioMult: 1.5,        
+            waveOpacity: 0.2,          
+            glitchAmount: 0.02,        
+            textOpacityBase: 0.7,
+            textGlitchIntensity: 0.0,   
+            textDisplaceIntensity: 0.0  
+        },
+        2: { // RISING (蓄势上升)
+            name: "2: RISING (蓄势上升)",
+            speedScale: 0.45,
+            warpScale: 9.0,
+            stripeBaseY: 0.95,
+            stripeAudioMult: 0.22,
+            fontBaseScale: 1.0,
+            fontAudioMult: 0.4,
+            waveBaseY: 17.0,
+            waveScale: 0.6,
+            waveAudioMult: 4.5,
+            waveOpacity: 0.45,
+            glitchAmount: 0.08,
+            textOpacityBase: 0.85,
+            textGlitchIntensity: 0.03,  
+            textDisplaceIntensity: 0.12 
+        },
+        3: { // CLIMAX (高潮闪烁) - speedScale 已平滑放慢，防眩晕
+            name: "3: CLIMAX (高潮闪烁)",
+            speedScale: 0.55,           
+            warpScale: 18.0,           
+            stripeBaseY: 0.0,          
+            stripeAudioMult: 0.0,      
+            fontBaseScale: 1.1,        
+            fontAudioMult: 0.7,        
+            waveBaseY: 14.0,           
+            waveScale: 1.5,            
+            waveAudioMult: 14.0,       
+            waveOpacity: 0.85,         
+            glitchAmount: 0.45,        
+            textOpacityBase: 1.0,
+            textGlitchIntensity: 0.15,  
+            textDisplaceIntensity: 0.65 
+        },
+        4: { // GLITCH (数字故障) - speedScale 已平滑放慢，防眩晕
+            name: "4: GLITCH (数字故障)",
+            speedScale: 0.65,
+            warpScale: 21.0,
+            stripeBaseY: 1.0,
+            stripeAudioMult: 0.35,
+            fontBaseScale: 1.15,
+            fontAudioMult: 0.75,
+            waveBaseY: 15.5,
+            waveScale: 2.5,
+            waveAudioMult: 16.0,
+            waveOpacity: 0.9,
+            glitchAmount: 0.65,
+            textOpacityBase: 0.9,
+            textGlitchIntensity: 0.42,  
+            textDisplaceIntensity: 1.15 
+        },
+        5: { // DECAY (落幕尾奏)
+            name: "5: DECAY (落幕尾奏)",
+            speedScale: 0.08,
+            warpScale: 2.2,
+            stripeBaseY: 0.55,
+            stripeAudioMult: 0.02,
+            fontBaseScale: 0.8,
+            fontAudioMult: 0.05,
+            waveBaseY: 19.5,
+            waveScale: 0.05,
+            waveAudioMult: 0.3,
+            waveOpacity: 0.12,
+            glitchAmount: 0.0,
+            textOpacityBase: 0.4,
+            textGlitchIntensity: 0.0,
+            textDisplaceIntensity: 0.02 
+        }
+    };
+
+    let activeStateNum = 1;
+    let previousStateNum = 1;
+    let currentParams = { ...STATES[1] }; 
+
+    // 键盘物理按键事件监听
+    window.addEventListener('keydown', (e) => {
+        if (e.key === 'q' || e.key === 'Q') {
+            isQDown = true;
+        }
+        if (e.key === 'w' || e.key === 'W') {
+            isWDown = true;
+        }
+        if (e.key === 'e' || e.key === 'E') {
+            isEDown = true;
+        }
+        if (e.key === 'r' || e.key === 'R') {
+            isRDown = true;
+        }
+        if (e.key === 't' || e.key === 'T') {
+            isTDown = true;
+        }
+        
+        if (['1', '2', '3', '4', '5'].includes(e.key)) {
+            previousStateNum = activeStateNum;
+            activeStateNum = parseInt(e.key);
+            document.getElementById('stateName').innerText = STATES[activeStateNum].name;
+            
+            const wasHidden = (previousStateNum === 3);
+            const isHidden = (activeStateNum === 3);
+            if (wasHidden !== isHidden) {
+                updateMaterialForState(activeStateNum);
+            }
+        }
+    });
+
+    window.addEventListener('keyup', (e) => {
+        if (e.key === 'q' || e.key === 'Q') {
+            isQDown = false;
+        }
+        if (e.key === 'w' || e.key === 'W') {
+            isWDown = false;
+        }
+        if (e.key === 'e' || e.key === 'E') {
+            isEDown = false;
+        }
+        if (e.key === 'r' || e.key === 'R') {
+            isRDown = false;
+        }
+        if (e.key === 't' || e.key === 'T') {
+            isTDown = false;
+        }
+    });
+
+    // 屏幕后期色散、像素拉伸、双向像素排序、随机反色与手动反色综合渲染器
+    const GlitchShader = {
+        uniforms: { 
+            "tDiffuse": { value: null }, 
+            "amount": { value: 0.0 }, 
+            "time": { value: 0.0 },
+            "invert": { value: 0.0 },
+            "manualInvert": { value: 0.0 },
+            "manualStretch": { value: 0.0 },
+            "manualSort": { value: 0.0 },
+            "manualBlocksAmount": { value: 0.0 },
+            "manualDisplaceAmount": { value: 0.0 }
+        },
+        vertexShader: `varying vec2 vUv; void main() { vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }`,
+        fragmentShader: `
+            uniform sampler2D tDiffuse; 
+            uniform float amount; 
+            uniform float time; 
+            uniform float invert;
+            uniform float manualInvert;
+            uniform float manualStretch;
+            uniform float manualSort;
+            uniform float manualBlocksAmount;
+            uniform float manualDisplaceAmount;
+            varying vec2 vUv;
+
+            float hash(vec2 p) {
+                return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453123);
             }
 
-            function goToSlide(index) {
-                if (isAnimating) return;
-                isAnimating = true;
+            // --- 像素排序核心采样器（全画面双向垂直瀑布流效果 + 动态液态随机化） ---
+            vec4 getSortedColor(sampler2D tex, vec2 uv, float manualSort, float time) {
+                vec4 col = texture2D(tex, uv);
+                if (manualSort < 0.01) return col;
+                
+                float colWidth = 640.0; // 提升直列密度，使线条更加细腻逼真
+                float xNum = floor(uv.x * colWidth) / colWidth;
+                
+                // 1. 结合液态横向滚动波纹（平滑流动）与 15Hz 数码颗粒（离散跳跃）
+                float wave = sin(time * 1.5 + xNum * 15.0) * 0.25;
+                float stepTime = floor(time * 15.0) * 0.033;
+                float noise = hash(vec2(xNum + wave, stepTime));
+                
+                // 2. 双向控制：随机决定当前列是向上流淌（拉伸下方）还是向下流淌（拉伸上方）
+                float dirNoise = hash(vec2(xNum - wave, stepTime + 88.88));
+                float isUpward = step(0.5, dirNoise); 
+                float signVal = mix(1.0, -1.0, isUpward); // 改变 offset 的检索正负符号
+                
+                // 纵向最大流淌长度由 E 键按压深度与低音联合控制
+                float maxOffset = 0.45 * manualSort * (0.05 + 0.95 * noise);
+                
+                // 每列步长引入动态微小呼吸，模拟水流反光变幻的波纹感
+                float stepSize = 0.0035 + noise * 0.0045 + sin(time * 3.0 + xNum * 30.0) * 0.0005; 
+                
+                float baseLuma = dot(col.rgb, vec3(0.299, 0.587, 0.114));
+                
+                // 全画面无差别贯通（包括纯黑背景）：根据 signVal 双向检索色彩并拉伸
+                for (int i = 1; i < 45; i++) {
+                    float offset = float(i) * stepSize;
+                    if (offset > maxOffset) break;
+                    
+                    // 根据双向标志决定扫描方向 (Y 轴正向或负向)
+                    vec2 scanUv = vec2(uv.x, uv.y + offset * signVal);
+                    if (scanUv.y < 0.0 || scanUv.y > 1.0) break;
+                    
+                    vec4 testCol = texture2D(tex, scanUv);
+                    float testLuma = dot(testCol.rgb, vec3(0.299, 0.587, 0.114));
+                    
+                    // 亮部向反方向延伸拉伸
+                    if (testLuma > baseLuma + 0.02) {
+                        col = testCol;
+                        break;
+                    }
+                }
+                return col;
+            }
 
-                const fromSlide = slides[currentSlide];
-                const toSlide = slides[index];
+            void main() {
+                vec2 uv = vUv;
 
-                const outTimeline = gsap.timeline({ onComplete: () => gsap.set(fromSlide, { autoAlpha: 0 }) });
-                outTimeline.to(fromSlide, { autoAlpha: 0, duration: 0.5 });
-
-                const inTimeline = gsap.timeline({ onComplete: () => { isAnimating = false; updateNavButtons(); } });
-                gsap.set(toSlide, { autoAlpha: 1 });
-
-                // **FIXED LOGIC**: Pass the target slide 'toSlide' into the animation function
-                const animationFunc = window[`animate_${toSlide.dataset.animation}`];
-                if (typeof animationFunc === 'function') {
-                    animationFunc(inTimeline, toSlide); // Pass the slide element
-                } else {
-                    inTimeline.from(toSlide, { autoAlpha: 0, duration: 0.8 });
+                // --- 1. 手动 T 键：全屏随机小块进行坐标错位 (Block Displacement) ---
+                vec2 blockShift = vec2(0.0);
+                if (manualDisplaceAmount > 0.01) {
+                    float displaceSpeed = 1.2 + manualDisplaceAmount * 3.3; // 调低错位帧率 (1.2Hz ~ 4.5Hz)，使其顿挫有力
+                    float timeSeed = floor(time * displaceSpeed);
+                    
+                    for (int i = 0; i < 6; i++) {
+                        float seed = float(i) * 37.19 + timeSeed;
+                        
+                        // 100% 随机盒子中心点
+                        float bx = hash(vec2(seed, 2.81));
+                        float by = hash(vec2(seed, 5.14));
+                        
+                        // 100% 独立且随机的宽高比例 (8% ~ 50%)
+                        float bw = 0.08 + hash(vec2(seed, 7.33)) * 0.42; 
+                        float bh = 0.08 + hash(vec2(seed, 9.61)) * 0.42; 
+                        
+                        float inBlock = step(bx - bw * 0.5, uv.x) * step(uv.x, bx + bw * 0.5) *
+                                        step(by - bh * 0.5, uv.y) * step(uv.y, by + bh * 0.5);
+                        
+                        // 决定该块是否激活 (随机数量控制)
+                        float blockThreshold = hash(vec2(seed, 12.45));
+                        float isActive = step(blockThreshold, manualDisplaceAmount * 0.65);
+                        
+                        float trigger = inBlock * isActive;
+                        
+                        if (trigger > 0.5) {
+                            // 100% 随机偏移方向（左/右/上/下/斜向）
+                            float displaceX = hash(vec2(seed, 15.63)) * 2.0 - 1.0;
+                            float displaceY = hash(vec2(seed, 18.29)) * 2.0 - 1.0;
+                            
+                            blockShift.x += displaceX * 0.16 * manualDisplaceAmount;
+                            blockShift.y += displaceY * 0.16 * manualDisplaceAmount;
+                        }
+                    }
+                    uv += blockShift;
                 }
 
-                currentSlide = index;
-                updatePageNumber(currentSlide);
-                updateNavButtons();
+                // --- 2. 手动 W 键：动态条带状像素横纵向拉伸特效（加入滑动漂移，消除死板固定感） ---
+                if (manualStretch > 0.01) {
+                    float bands = 24.0;
+                    // 在 y 轴位置中混入随时间漂移的正弦波，让条带缓缓上下滑动
+                    float bandId = floor((uv.y + sin(time * 0.4) * 0.06) * bands);
+                    float randOffset = hash(vec2(bandId, 7.89));
+                    float sourceX = fract(time * 0.1 + randOffset);
+                    
+                    float trigger = step(0.35, hash(vec2(bandId, floor(time * 8.0))));
+                    if (trigger > 0.5) {
+                        uv.x = mix(uv.x, sourceX, manualStretch * 0.95);
+                    }
+                    
+                    float vBands = 12.0;
+                    // 纵向条带同样加入横向滚动偏移
+                    float vBandId = floor((uv.x + cos(time * 0.3) * 0.06) * vBands);
+                    float vTrigger = step(0.65, hash(vec2(vBandId, floor(time * 12.0))));
+                    if (vTrigger > 0.5) {
+                        float sourceY = fract(time * 0.05 + hash(vec2(vBandId, 3.45)));
+                        uv.y = mix(uv.y, sourceY, manualStretch * 0.8);
+                    }
+                }
+                
+                float doStretch = step(0.96, sin(uv.y * 25.0 - time * 10.0)); 
+                uv.x = mix(uv.x, 0.5 + (uv.x - 0.5) * (1.0 - amount * 0.8), doStretch * amount);
+                
+                float shift = amount * 0.03 * doStretch;
+                
+                // --- 3. 采样像素排序，并叠加色散 ---
+                vec4 cb = getSortedColor(tDiffuse, uv - vec2(shift, 0.0), manualSort, time);
+                vec4 cg = getSortedColor(tDiffuse, uv, manualSort, time);
+                vec4 cr = getSortedColor(tDiffuse, uv + vec2(shift, 0.0), manualSort, time);
+                
+                vec3 finalColor = vec3(cr.r, cg.g, cb.b);
+                
+                // --- 4. 状态 3：高频随机大块反色闪光效果 ---
+                if (invert > 0.01) {
+                    float timeSeed = floor(time * 3.5); 
+                    float shouldInvert = 0.0;
+                    
+                    for (int i = 0; i < 6; i++) {
+                        float seed = float(i) * 13.57 + timeSeed;
+                        
+                        float rx = hash(vec2(seed, 1.1));
+                        float ry = hash(vec2(seed, 2.2));
+                        
+                        float rw = 0.25 + hash(vec2(seed, 3.3)) * 0.65;
+                        float rh = 0.25 + hash(vec2(seed, 4.4)) * 0.65;
+                        
+                        float inBox = step(rx - rw * 0.5, uv.x) * step(uv.x, rx + rw * 0.5) *
+                                      step(ry - rh * 0.5, uv.y) * step(uv.y, ry + rh * 0.5);
+                        
+                        float boxThreshold = hash(vec2(seed, 5.5));
+                        float boxActive = step(boxThreshold, invert);
+                        
+                        shouldInvert = max(shouldInvert, inBox * boxActive);
+                    }
+                    
+                    finalColor = mix(finalColor, 1.0 - finalColor, shouldInvert);
+                }
+
+                // --- 5. 手动 R 键：动态随机反色色块（闪烁频率由当前状态决定，尺寸位置完全随机化） ---
+                if (manualBlocksAmount > 0.01) {
+                    float blockSpeed = 1.5 + manualBlocksAmount * 4.0; // 调低频率 (1.5Hz ~ 5.5Hz)，增强定格卡顿感
+                    float timeSeed = floor(time * blockSpeed);
+                    float shouldInvertBlock = 0.0;
+                    
+                    for (int i = 0; i < 8; i++) {
+                        float seed = float(i) * 21.43 + timeSeed;
+                        
+                        // 100% 随机坐标点
+                        float bx = hash(vec2(seed, 1.37));
+                        float by = hash(vec2(seed, 4.82));
+                        
+                        // 100% 独立宽高比随机生成 (5% ~ 60%)
+                        float bw = 0.05 + hash(vec2(seed, 6.19)) * 0.55; 
+                        float bh = 0.05 + hash(vec2(seed, 8.41)) * 0.55; 
+                        
+                        float inBlock = step(bx - bw * 0.5, uv.x) * step(uv.x, bx + bw * 0.5) *
+                                        step(by - bh * 0.5, uv.y) * step(uv.y, by + bh * 0.5);
+                        
+                        float blockThreshold = hash(vec2(seed, 11.23));
+                        float blockActive = step(blockThreshold, manualBlocksAmount); // 对应当前状态设定激活概率
+                        
+                        shouldInvertBlock = max(shouldInvertBlock, inBlock * blockActive);
+                    }
+                    
+                    finalColor = mix(finalColor, 1.0 - finalColor, shouldInvertBlock);
+                }
+
+                // --- 6. 手动 Q 键：全画幅同步全屏反色叠加 ---
+                if (manualInvert > 0.01) {
+                    finalColor = mix(finalColor, 1.0 - finalColor, manualInvert);
+                }
+                
+                gl_FragColor = vec4(finalColor, 1.0);
             }
+        `
+    };
 
-            // --- Unique Animation Functions ---
-            // **FIXED**: All functions now accept 'slide' as a parameter and use it for selectors.
-            window.animate_title = (tl, slide) => {
-                tl.from(slide.querySelector('.s1-red-block'), { scaleY: 0, transformOrigin: 'bottom', duration: 1, ease: 'power3.inOut' })
-                    .to(slide.querySelectorAll('.s1-title h1,.s1-title h2, .s1-subtitle p'), { y: 0, stagger: 0.1, duration: 1, ease: 'power3.out' }, '-=0.5')
-                    .from(slide.querySelector('.s1-details'), { opacity: 0, y: 20, duration: 0.5 }, '-=0.5');
-            };
-            window.animate_split = (tl, slide) => {
-                tl.from(slide.querySelector('.s2-red-side'), { xPercent: -100, duration: 1, ease: 'power3.inOut' })
-                    .from(slide.querySelector('.s2-white-side'), { xPercent: 100, duration: 1, ease: 'power3.inOut' }, '<')
-                    .from(slide.querySelectorAll('.s2-white-side > *'), { opacity: 0, y: 30, stagger: 0.15 }, '-=0.5');
-            };
-            // 请用这个新函数替换掉您文件中已有的 animate_verticalArch 函数
-            window.animate_verticalArch = (tl, slide) => {
-                // 1. Animate the image panel fading in with an upward motion (now on the left)
-                tl.from(slide.querySelector('.s3-image-panel'), {
-                    opacity: 0,
-                    y: 50,
-                    duration: 1,
-                    ease: 'power3.out'
-                });
+    const scene = new THREE.Scene();
+    scene.background = new THREE.Color(0x000000); 
 
-                // 2. Animate the red text panel sliding in from the right
-                tl.from(slide.querySelector('.s3-text-panel'), {
-                    xPercent: 100, // Changed from -100 to 100
-                    duration: 1,
-                    ease: 'power3.inOut'
-                }, "-=0.8"); // Overlap for a smoother transition
+    const camera = new THREE.PerspectiveCamera(50, window.innerWidth / window.innerHeight, 0.1, 1000);
+    camera.position.set(0, 0, 48); 
+    
+    const renderer = new THREE.WebGLRenderer({ antialias: true });
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    renderer.setPixelRatio(window.devicePixelRatio);
+    document.body.appendChild(renderer.domElement);
 
-                // 3. Animate the text content inside the red panel
-                tl.from(slide.querySelectorAll('.s3-text-panel h1, .s3-text-panel li'), {
-                    opacity: 0,
-                    x: 30, // Changed from -30 to 30
-                    stagger: 0.15,
-                    duration: 0.8
-                }, "-=0.7");
-            };
-            window.animate_techDetailHybrid = (tl, slide) => {
-                tl.from(slide.querySelectorAll('.text-content > *'), {
-                    x: (slide.style.flexDirection === 'row-reverse' ? 50 : -50),
-                    opacity: 0,
-                    stagger: 0.15,
-                    duration: 0.8,
-                    ease: 'power2.out'
-                });
-                tl.from(slide.querySelector('.main-diagram'), { scale: 0.8, opacity: 0, duration: 1, ease: 'expo.out' }, '-=0.6');
-                tl.from(slide.querySelectorAll('.diagram-box'), { scale: 0.5, opacity: 0, stagger: 0.2, duration: 0.7, ease: 'back.out(1.7)' }, '-=0.7');
-            };
+    // 中间实体白色切片
+    const stripeGeo = new THREE.PlaneGeometry(240, 14.0); 
+    const stripeMat = new THREE.MeshBasicMaterial({ color: 0xffffff });
+    const stripeMesh = new THREE.Mesh(stripeGeo, stripeMat);
+    stripeMesh.position.set(0, 0, -5); 
+    scene.add(stripeMesh);
 
-            window.animate_focusCards = (tl, slide) => {
-                // Set initial states
-                gsap.set(slide.querySelectorAll('.s6-card'), { y: 100, opacity: 0, scale: 0.9 });
-                gsap.set(slide.querySelectorAll('.s6-main-title span'), { y: '100%', opacity: 0 });
-                // Set the overlay to be invisible initially
-                gsap.set(slide.querySelector('.gradient-overlay'), { opacity: 0 });
+    // 零点刻度辅助线
+    const axisGeo = new THREE.BufferGeometry();
+    const axisPos = new Float32Array([
+        -100, 16.5, 2,  100, 16.5, 2,  
+        -100, -16.5, 2, 100, -16.5, 2  
+    ]);
+    axisGeo.setAttribute('position', new THREE.BufferAttribute(axisPos, 3));
+    const axisMat = new THREE.LineBasicMaterial({ color: 0x1c1c1c, transparent: true, opacity: 0.6 });
+    const axisLines = new THREE.LineSegments(axisGeo, axisMat);
+    scene.add(axisLines);
 
-                // Animate the container's background color from white to the final solid red
-                tl.from(slide.querySelector('.s6-container'), {
-                    backgroundColor: '#F9F9F9',
-                    duration: 0.8,
-                    ease: 'power2.inOut'
-                });
+    // 上下对称示波波形
+    const wavePointsCount = 128;
+    const topWaveGeo = new THREE.BufferGeometry();
+    const topWavePos = new Float32Array(wavePointsCount * 3);
+    topWaveGeo.setAttribute('position', new THREE.BufferAttribute(topWavePos, 3));
 
-                // AT THE SAME TIME, fade in the gradient overlay
-                tl.to(slide.querySelector('.gradient-overlay'), {
-                    opacity: 0.21,
-                    duration: 1.2,
-                    ease: 'power2.inOut'
-                }, "<"); // "<" means start at the same time as the previous animation
+    const bottomWaveGeo = new THREE.BufferGeometry();
+    const bottomWavePos = new Float32Array(wavePointsCount * 3);
+    bottomWaveGeo.setAttribute('position', new THREE.BufferAttribute(bottomWavePos, 3));
 
-                // The rest of the content animation follows
-                tl.to(slide.querySelectorAll('.s6-main-title span'), { y: '0%', opacity: 1, stagger: 0.1, duration: 0.8, ease: 'power3.out' }, '-=1.0');
-                tl.to(slide.querySelectorAll('.s6-card'), { y: 0, opacity: 1, scale: 1, stagger: 0.2, duration: 1, ease: 'expo.out' }, '-=0.8');
-                tl.from(slide.querySelectorAll('.s6-card > *'), { y: 20, opacity: 0, stagger: 0.1, duration: 0.6, ease: 'power2.out' }, '-=0.8');
-            };
-            window.animate_bigStats = (tl, slide) => {
-                // 1. Animate the title in from the top
-                tl.from(slide.querySelector('.s7-main-title'), {
-                    y: -50,
-                    opacity: 0,
-                    duration: 0.8,
-                    ease: 'power2.out'
-                });
+    const waveMaterial = new THREE.LineBasicMaterial({ 
+        color: 0xff1133, 
+        transparent: true, 
+        opacity: 0.65 
+    });
 
-                // 2. Animate the stats row
-                tl.from(slide.querySelector('.s7-stats-row'), {
-                    y: -30,
-                    opacity: 0,
-                    duration: 0.8
-                }, '-=0.6'); // Overlap slightly with the title animation
+    const topWaveLine = new THREE.Line(topWaveGeo, waveMaterial);
+    const bottomWaveLine = new THREE.Line(bottomWaveGeo, waveMaterial);
+    scene.add(topWaveLine);
+    scene.add(bottomWaveLine);
 
-                // 3. Animate the comparison row in from the bottom
-                tl.from(slide.querySelector('.s7-comparison-row'), {
-                    y: 50,
-                    opacity: 0,
-                    duration: 0.8
-                }, '-=0.6'); // Overlap as well
-            };
-            window.animate_gallery = (tl, slide) => {
-                tl.from(slide.querySelector('.s8-header'), { y: -50, opacity: 0, duration: 0.8 })
-                    .from(slide.querySelectorAll('.s8-item'), { y: 100, opacity: 0, stagger: 0.2, duration: 1, ease: 'expo.out' }, '-=0.5');
-            };
-            window.animate_tiltedHeader = (tl, slide) => {
-                tl.from(slide.querySelector('.s9-header-bg'), { scaleY: 0, transformOrigin: 'top', duration: 1, ease: 'power3.inOut' })
-                    .from(slide.querySelector('.s9-content h1'), { x: -100, opacity: 0, duration: 0.8 }, '-=0.5')
-                    .from(slide.querySelector('.s9-content ul'), { y: 100, opacity: 0, duration: 0.8 }, '-=0.5');
-            };
-            window.animate_final = (tl, slide) => {
-                tl.from(slide.querySelector('.s11-text'), { scale: 0.5, opacity: 0, duration: 1, ease: 'back.out(1.7)' })
-                    .from(slide.querySelector('.s11-subtext'), { y: 20, opacity: 0, duration: 0.5 }, '-=0.5');
-            };// 请将这个新函数添加到您文件中已有的其他 animate_... 函数旁边
-            window.animate_new1 = (tl, slide) => {
-                // Animate the main header (h1 and subtitle)
-                tl.from(slide.querySelectorAll('.new1-header h1, .new1-header p'), {
-                    y: -50,
-                    opacity: 0,
-                    duration: 0.8,
-                    stagger: 0.15 // Title and subtitle appear sequentially
-                });
-                // Animate the gallery items
-                tl.from(slide.querySelectorAll('.new1-item'), {
-                    y: 100,
-                    opacity: 0,
-                    stagger: 0.2,
-                    duration: 1,
-                    ease: 'expo.out'
-                }, '-=0.5');
-            };
 
-            function updateNavButtons() {
-                prevBtn.disabled = currentSlide === 0;
-                nextBtn.disabled = currentSlide === totalSlides - 1;
-            }
+    // 75条矢量流沙丝绸线
+    const streamGroup = new THREE.Group();
+    const lineCount = 75;    
+    const pointsCount = 150;  
+    const linesArray = [];
 
-            // Event Listeners
-            nextBtn.addEventListener('click', () => { if (currentSlide < totalSlides - 1) goToSlide(currentSlide + 1); });
-            prevBtn.addEventListener('click', () => { if (currentSlide > 0) goToSlide(currentSlide - 1); });
-            document.addEventListener('keydown', (e) => {
-                if (e.key === 'ArrowRight' && currentSlide < totalSlides - 1) nextBtn.click();
-                else if (e.key === 'ArrowLeft' && currentSlide > 0) prevBtn.click();
+    const differenceMaterial = new THREE.LineBasicMaterial({
+        color: 0xffffff, 
+        transparent: true,
+        blending: THREE.CustomBlending,
+        blendEquation: THREE.ReverseSubtractEquation, 
+        blendSrc: THREE.OneFactor,
+        blendDst: THREE.OneFactor,
+        depthWrite: false 
+    });
+    
+    for(let l = 0; l < lineCount; l++) {
+        const lineGeo = new THREE.BufferGeometry();
+        const linePositions = new Float32Array(pointsCount * 3);
+        lineGeo.setAttribute('position', new THREE.BufferAttribute(linePositions, 3));
+        
+        const line = new THREE.Line(lineGeo, differenceMaterial);
+        streamGroup.add(line);
+        linesArray.push({ mesh: line, geo: lineGeo });
+    }
+    scene.add(streamGroup);
+
+    // ==========================================
+    // 动态文字状态机引擎 (Cipher State Machine Engine)
+    // ==========================================
+    let textCanvas, textCtx, flatTextTexture;
+    
+    // 3D 物理空间位移阻尼控制变量
+    let textMeshTargetX = 0, textMeshTargetY = 0, textMeshTargetZ = 8;
+    let jitterTimer = 0; 
+    
+    // 动态初始化每个字符的状态
+    let textStates = [];
+
+    function setCustomText(str) {
+        str = str.toUpperCase().trim() || "kasasakana";
+        textStates = [];
+        for (let i = 0; i < str.length; i++) {
+            const char = str[i];
+            textStates.push({ 
+                current: char, 
+                original: char, 
+                glitchTimer: 0, 
+                dx: 0, 
+                dy: 0, 
+                targetDx: 0, 
+                targetDy: 0 
             });
+        }
+    }
 
-            // Initial setup
-            updateNavButtons();
-            updatePageNumber(0);
-            const firstAnimation = slides[0].dataset.animation;
-            const firstTl = gsap.timeline({ onComplete: () => { isAnimating = false; } });
-            isAnimating = true;
-            window[`animate_${firstAnimation}`](firstTl, slides[0]);
+    function initTextCanvas() {
+        textCanvas = document.createElement('canvas');
+        textCanvas.width = 1024;
+        textCanvas.height = 512;
+        textCtx = textCanvas.getContext('2d');
+        flatTextTexture = new THREE.CanvasTexture(textCanvas);
+        drawTextFromState(); 
+    }
+
+    // 更新每个字符的突变生命周期、以及平滑位移目标
+    function updateTextState(dt, glitchInt, displaceInt) {
+        const glitchChars = ['@', '#', '$', '%', '&', '*', '?', 'X', '9', '0', '_', '<', '>', '!', '§', 'Δ', 'Ψ', 'Ø', 'Ξ', 'Σ', 'Φ', 'Ω', 'Ξ'];
+        
+        // 1. 异常字符生存期控制：赋予变异字母 0.2s - 0.6s 的生存寿命，使变异字符“持久残留”，消除急躁的高频乱闪
+        for (let i = 0; i < textStates.length; i++) {
+            const s = textStates[i];
+            if (s.glitchTimer > 0) {
+                s.glitchTimer -= dt;
+                if (s.glitchTimer <= 0) {
+                    s.current = s.original; // 生命周期结束，复原原文字
+                }
+            } else {
+                // 根据状态参数与高频电平，按时间概率随机突变
+                if (glitchInt > 0.001 && Math.random() < glitchInt * dt * 22.0) {
+                    s.current = glitchChars[Math.floor(Math.random() * glitchChars.length)];
+                    s.glitchTimer = 0.2 + Math.random() * 0.4; // 停留时间延长
+                }
+            }
+        }
+
+        // 2. 降低抖动物理频率：将原本 60Hz 帧率的物理抖动大幅度降低至 ~12.5Hz (每 0.08 秒变换一次目标位)
+        jitterTimer += dt;
+        if (jitterTimer >= 0.08) {
+            jitterTimer = 0;
+            for (let i = 0; i < textStates.length; i++) {
+                const s = textStates[i];
+                if (displaceInt > 0.001 && Math.random() < 0.6) {
+                    s.targetDx = (Math.random() - 0.5) * displaceInt * 32.0;
+                    s.targetDy = (Math.random() - 0.5) * displaceInt * 32.0;
+                } else {
+                    s.targetDx = 0;
+                    s.targetDy = 0;
+                }
+            }
+        }
+
+        // 3. 2D 平面插值/瞬移控制：状态3、4不加平滑实行硬抖动，其他状态采用液体阻尼滑行
+        const lerpFactor = 0.15; 
+        for (let i = 0; i < textStates.length; i++) {
+            const s = textStates[i];
+            if (activeStateNum === 3 || activeStateNum === 4) {
+                s.dx = s.targetDx;
+                s.dy = s.targetDy;
+            } else {
+                s.dx = THREE.MathUtils.lerp(s.dx, s.targetDx, lerpFactor);
+                s.dy = THREE.MathUtils.lerp(s.dy, s.targetDy, lerpFactor);
+            }
+        }
+    }
+
+    function drawTextFromState() {
+        textCtx.clearRect(0, 0, textCanvas.width, textCanvas.height);
+        
+        // 动态画布自适应等比缩放，防止字符过多时左右溢出裁剪
+        const maxTextWidth = 850; 
+        const numChars = textStates.length || 1;
+        const spacing = Math.min(100, maxTextWidth / numChars);
+        const fontSize = Math.min(95, spacing * 1.1); 
+        
+        textCtx.font = `bold ${Math.floor(fontSize)}px "Helvetica Neue", Helvetica, Arial, sans-serif`;
+        textCtx.textAlign = 'center'; 
+        textCtx.textBaseline = 'middle';
+        
+        const startX = textCanvas.width / 2 - ((numChars - 1) * spacing) / 2;
+        const centerY = textCanvas.height / 2;
+        
+        textCtx.fillStyle = '#ff1133';
+        
+        // 读取状态机的渲染状态，投射绘制到 Canvas 上
+        for (let i = 0; i < textStates.length; i++) {
+            const s = textStates[i];
+            textCtx.fillText(s.current, startX + i * spacing + s.dx, centerY + s.dy);
+        }
+        flatTextTexture.needsUpdate = true;
+    }
+    
+    // 初始化默认自定义文本并建立画布
+    setCustomText("kasasakana");
+    initTextCanvas();
+
+    const textPlaneGeo = new THREE.PlaneGeometry(36, 18);
+    const textPlaneMat = new THREE.MeshBasicMaterial({ 
+        map: flatTextTexture, 
+        transparent: true, 
+        side: THREE.DoubleSide,
+        opacity: 0.9 
+    });
+    const textMesh = new THREE.Mesh(textPlaneGeo, textPlaneMat);
+    textMesh.position.set(0, 0, 8); 
+    scene.add(textMesh);
+
+    // ==========================================
+    // 动态切换材质混合模式（状态3隐藏白块，启用叠加模式）
+    // ==========================================
+    function updateMaterialForState(stateNum) {
+        if (stateNum === 3) {
+            stripeMesh.visible = false;
+            axisLines.visible = false;
+            differenceMaterial.blending = THREE.NormalBlending;
+            differenceMaterial.blendEquation = THREE.AddEquation;
+            differenceMaterial.color.setHex(0xffffff); 
+            differenceMaterial.needsUpdate = true;
+        } else {
+            stripeMesh.visible = true;
+            axisLines.visible = true;
+            differenceMaterial.blending = THREE.CustomBlending;
+            differenceMaterial.blendEquation = THREE.ReverseSubtractEquation;
+            differenceMaterial.color.setHex(0xffffff);
+            differenceMaterial.needsUpdate = true;
+        }
+    }
+    updateMaterialForState(1);
+
+    // 音频接入
+    document.getElementById('audioInput').addEventListener('change', function(e) {
+        const file = e.target.files[0];
+        if (!file) return;
+
+        // 正式启动 VJ 时读取输入框文本并重绘
+        const customWord = document.getElementById('textInput').value.trim();
+        setCustomText(customWord);
+        drawTextFromState();
+
+        if(!audioCtx) {
+            audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+            analyser = audioCtx.createAnalyser();
+            analyser.fftSize = 256;
+            dataArray = new Uint8Array(analyser.frequencyBinCount);
+            timeDataArray = new Uint8Array(analyser.frequencyBinCount); 
+        }
+
+        const reader = new FileReader();
+        reader.onload = function(ev) {
+            audioCtx.decodeAudioData(ev.target.result, function(buffer) {
+                const source = audioCtx.createBufferSource();
+                source.buffer = buffer; source.connect(analyser); analyser.connect(audioCtx.destination);
+                source.start(0); isPlaying = true;
+                
+                document.getElementById('uploadUI').style.display = 'none';
+                document.getElementById('stateIndicator').style.display = 'none'; // 隐藏左上角状态面板
+            });
+        };
+        reader.readAsArrayBuffer(file);
+    });
+
+    const composer = new EffectComposer(renderer);
+    composer.addPass(new RenderPass(scene, camera));
+    const vjPass = new ShaderPass(GlitchShader);
+    composer.addPass(vjPass);
+
+    const clock = new THREE.Clock();
+    let customTime = 0; 
+    let smoothBass = 0; 
+    let snappyBass = 0; 
+    let snappyHighs = 0; 
+    let textGlitchActive = false; 
+
+    // 高性能多层旋转正弦波流体噪声
+    function fluidNoise(x, y, t) {
+        let v = 0.0;
+        v += Math.sin(x * 0.05 + t * 0.6) * 1.0;
+        v += Math.cos(y * 0.05 - t * 0.4) * 1.0;
+        
+        let nx = (x - y) * 0.707;
+        let ny = (x + y) * 0.707;
+        v += Math.sin(nx * 0.09 - t * 0.8) * 0.5;
+        v += Math.cos(ny * 0.09 + t * 0.6) * 0.5;
+
+        let nnx = (nx + ny) * 0.707;
+        let nny = (ny - nx) * 0.707;
+        v += Math.sin(nnx * 0.2 + t * 1.3) * 0.25;
+        v += Math.cos(nny * 0.2 - t * 1.0) * 0.25;
+
+        return v; 
+    }
+
+    // 渲染主循环
+    function animate() {
+        requestAnimationFrame(animate);
+        
+        const delta = clock.getDelta();
+        
+        // ==========================================
+        // 平滑插值计算 (Lerp Engine)
+        // ==========================================
+        const targetParams = STATES[activeStateNum];
+        const lerpFactor = 0.04; 
+        for (let key in currentParams) {
+            if (key !== 'name') {
+                currentParams[key] = THREE.MathUtils.lerp(currentParams[key], targetParams[key], lerpFactor);
+            }
+        }
+
+        customTime += delta * currentParams.speedScale * 3.0;
+
+        let rawBass = 0;
+        let rawHighs = 0;
+        if (isPlaying && analyser) {
+            analyser.getByteFrequencyData(dataArray);
+            analyser.getByteTimeDomainData(timeDataArray); 
+            
+            let bassSum = 0;
+            for(let i = 0; i < 3; i++) bassSum += dataArray[i];
+            rawBass = (bassSum / 3) / 255; 
+            
+            let highsSum = 0;
+            const highStart = 50;
+            const highEnd = 110;
+            for (let i = highStart; i < highEnd; i++) {
+                highsSum += dataArray[i];
+            }
+            rawHighs = (highsSum / (highEnd - highStart)) / 255;
+            
+            maxBassMemory = Math.max(maxBassMemory * 0.996, rawBass); 
+            
+            smoothBass = THREE.MathUtils.lerp(smoothBass, rawBass, 0.08); 
+            snappyBass = THREE.MathUtils.lerp(snappyBass, rawBass, 0.22); 
+            snappyHighs = THREE.MathUtils.lerp(snappyHighs, rawHighs, 0.25); 
+        }
+
+        // ==========================================
+        // 核心反色控制 (仅状态 3 关联超巨型高频随机反色闪烁)
+        // ==========================================
+        let targetInvert = 0.0;
+        if (activeStateNum === 3 && isPlaying) {
+            // 0.22 噪声门滤除微小高频，保证大闪动干脆有力
+            if (snappyHighs > 0.22) {
+                targetInvert = Math.min((snappyHighs - 0.22) * 2.0, 1.0); 
+            }
+        } else {
+            targetInvert = 0.0;
+        }
+
+        vjPass.uniforms["invert"].value = THREE.MathUtils.lerp(vjPass.uniforms["invert"].value, targetInvert, 0.18);
+
+        // ==========================================
+        // 手动全屏反色控制 (Q 键手动控制平滑阻尼信号衰减)
+        // ==========================================
+        const targetManualInvert = isQDown ? 1.0 : 0.0;
+        vjPass.uniforms["manualInvert"].value = THREE.MathUtils.lerp(vjPass.uniforms["manualInvert"].value, targetManualInvert, 0.25);
+
+        // ==========================================
+        // 手动像素拉伸控制 (W 键，附带低音节奏响应联动)
+        // ==========================================
+        const targetManualStretch = isWDown ? (0.4 + snappyBass * 0.6) : 0.0;
+        vjPass.uniforms["manualStretch"].value = THREE.MathUtils.lerp(vjPass.uniforms["manualStretch"].value, targetManualStretch, 0.25);
+
+        // ==========================================
+        // 手动像素排序控制 (E 键，附带低音节奏响应联动)
+        // ==========================================
+        const targetManualSort = isEDown ? (0.35 + snappyBass * 0.65) : 0.0;
+        vjPass.uniforms["manualSort"].value = THREE.MathUtils.lerp(vjPass.uniforms["manualSort"].value, targetManualSort, 0.22);
+
+        // ==========================================
+        // 手动随机反色块控制 (R 键，频率与密度随当前状态的 glitchAmount 决定)
+        // ==========================================
+        const targetRBlocks = isRDown ? (currentParams.glitchAmount * 0.8 + 0.2) : 0.0;
+        vjPass.uniforms["manualBlocksAmount"].value = THREE.MathUtils.lerp(vjPass.uniforms["manualBlocksAmount"].value, targetRBlocks, 0.22);
+
+        // ==========================================
+        // 手动全屏随机小块错位控制 (T 键，错位概率与位移量受 snappyBass 动态耦合)
+        // ==========================================
+        const targetTDisplace = isTDown ? (0.35 + snappyBass * 0.65) : 0.0;
+        vjPass.uniforms["manualDisplaceAmount"].value = THREE.MathUtils.lerp(vjPass.uniforms["manualDisplaceAmount"].value, targetTDisplace, 0.22);
+
+        // ==========================================
+        // 1. 黑色条带张开闭合 (非状态 3 时运行)
+        // ==========================================
+        if (activeStateNum !== 3) {
+            const stripeScaleY = currentParams.stripeBaseY + (Math.sin(customTime * 0.4) * 0.015) + snappyBass * currentParams.stripeAudioMult;
+            stripeMesh.scale.y = stripeScaleY;
+        }
+
+        // ==========================================
+        // 2. 实时示波波形渲染 
+        // ==========================================
+        waveMaterial.opacity = currentParams.waveOpacity; 
+        const baselineY = currentParams.waveBaseY;
+
+        if (activeStateNum !== 3) {
+            axisPos[1] = baselineY;  axisPos[4] = baselineY;
+            axisPos[7] = -baselineY; axisPos[10] = -baselineY;
+            axisGeo.attributes.position.needsUpdate = true;
+        }
+
+        for (let i = 0; i < wavePointsCount; i++) {
+            const pct = i / (wavePointsCount - 1);
+            const x = -80 + pct * 160; 
+
+            let dy = 0;
+            if (isPlaying && timeDataArray) {
+                const amp = (timeDataArray[i] - 128) / 128.0;
+                dy = amp * (currentParams.waveScale + snappyBass * currentParams.waveAudioMult);
+            } else {
+                dy = Math.sin(pct * Math.PI * 6.0 + customTime * 0.8) * 0.35 + Math.cos(pct * Math.PI * 2.0 - customTime * 0.3) * 0.15;
+            }
+
+            topWavePos[i * 3] = x;
+            topWavePos[i * 3 + 1] = baselineY + dy;
+            topWavePos[i * 3 + 2] = 2;
+
+            bottomWavePos[i * 3] = x;
+            bottomWavePos[i * 3 + 1] = -baselineY - dy;
+            bottomWavePos[i * 3 + 2] = 2;
+        }
+        topWaveGeo.attributes.position.needsUpdate = true;
+        bottomWaveGeo.attributes.position.needsUpdate = true;
+
+        // ==========================================
+        // 3. 字体平滑呼吸与音频缩放、动态乱码、3D物理震动
+        // ==========================================
+        const breathScale = Math.sin(customTime * 0.5) * 0.025 + Math.cos(customTime * 0.2) * 0.01;
+        const fontScale = currentParams.fontBaseScale + breathScale + snappyBass * currentParams.fontAudioMult; 
+        textMesh.scale.set(fontScale, fontScale, 1.0);
+
+        textPlaneMat.opacity = THREE.MathUtils.clamp(currentParams.textOpacityBase + (Math.sin(customTime * 0.5) * 0.1) + snappyBass * 0.15, 0.2, 1.0);
+
+        // --- 全状态通用：插值参数驱动 + 音频响应乘数机制的乱码与双重空间位移 ---
+        const activeGlitch = currentParams.textGlitchIntensity;
+        const activeDisplace = currentParams.textDisplaceIntensity;
+
+        // 乱码率与位移幅值在当前状态的基础参数上，随 snappyBass 产生爆发。在平静状态下不受杂音干扰
+        const dynamicGlitch = activeGlitch + snappyBass * activeGlitch * 1.5; 
+        const dynamicDisplace = activeDisplace + snappyBass * activeDisplace * 1.2;
+
+        // 每帧更新每个字符的状态
+        updateTextState(delta, dynamicGlitch, dynamicDisplace);
+
+        // 智能重绘判定：检查当前是否有任何一个字母还在变异中，或者其物理偏移尚未归零
+        let needsRedraw = false;
+        for (let i = 0; i < textStates.length; i++) {
+            const s = textStates[i];
+            if (s.current !== s.original || Math.abs(s.dx) > 0.01 || Math.abs(s.dy) > 0.01) {
+                needsRedraw = true;
+                break;
+            }
+        }
+
+        if (needsRedraw || dynamicGlitch > 0.001 || dynamicDisplace > 0.001) {
+            textGlitchActive = true;
+            
+            // 2D 文本画布重绘渲染
+            drawTextFromState();
+            
+            // 3D 物理空间平滑缓动抖动（以 ~12Hz 重新生成抖动目标）
+            if (dynamicDisplace > 0.01 && Math.random() < 0.15) { 
+                textMeshTargetX = (Math.random() - 0.5) * dynamicDisplace * 4.5;
+                textMeshTargetY = (Math.random() - 0.5) * dynamicDisplace * 4.5;
+                textMeshTargetZ = 8.0 + (Math.random() - 0.5) * dynamicDisplace * 3.0;
+            } else if (dynamicDisplace <= 0.01) {
+                textMeshTargetX = 0;
+                textMeshTargetY = 0;
+                textMeshTargetZ = 8;
+            }
+            
+            // 根据状态决定是否平滑跟随
+            if (activeStateNum === 3 || activeStateNum === 4) {
+                textMesh.position.x = textMeshTargetX;
+                textMesh.position.y = textMeshTargetY;
+                textMesh.position.z = textMeshTargetZ;
+            } else {
+                textMesh.position.x = THREE.MathUtils.lerp(textMesh.position.x, textMeshTargetX, 0.15);
+                textMesh.position.y = THREE.MathUtils.lerp(textMesh.position.y, textMeshTargetY, 0.15);
+                textMesh.position.z = THREE.MathUtils.lerp(textMesh.position.z, textMeshTargetZ, 0.15);
+            }
+        } else {
+            // 一旦进入无故障状态且物理错位、乱码全部恢复完毕，进行最后一次原样绘制，并锁死渲染节约开销
+            if (textGlitchActive) {
+                for(let i = 0; i < textStates.length; i++) {
+                    textStates[i].current = textStates[i].original;
+                    textStates[i].dx = 0; textStates[i].dy = 0;
+                    textStates[i].targetDx = 0; textStates[i].targetDy = 0;
+                }
+                drawTextFromState(); 
+                textGlitchActive = false;
+            }
+            textMesh.position.set(0, 0, 8);
+        }
+
+        // ==========================================
+        // 4. 矢量流沙丝绸线渲染（已提高动态速率与低音耦合度）
+        // ==========================================
+        linesArray.forEach((lineObj, l) => {
+            const positions = lineObj.geo.attributes.position.array;
+            
+            const yBase = -25 + (l / lineCount) * 50; 
+            const zVal = -15 + (l / lineCount) * 30; 
+
+            // 动态提升基础时间步进，并叠加上音乐低音节奏脉冲，使弧线在大音量下剧烈颤动
+            const dynamicTimeNoise = customTime * 0.55 + snappyBass * 0.45;
+            const dynamicTimeWave = customTime * 0.35 + snappyBass * 0.25;
+
+            for(let i = 0; i < pointsCount; i++) {
+                const pct = i / pointsCount;
+                const x = -80 + pct * 160; 
+
+                const n = fluidNoise(x * 0.8, yBase * 1.2, dynamicTimeNoise);
+                const warpScale = currentParams.warpScale + smoothBass * 11.0;
+
+                const dx = Math.sin(n * Math.PI * 0.8) * warpScale;
+                const dy = Math.cos(n * Math.PI * 0.8) * warpScale;
+
+                positions[i*3] = x + dx;
+                positions[i*3+1] = yBase + dy + Math.sin(x * 0.03 + dynamicTimeWave) * 2.0; 
+                positions[i*3+2] = zVal;                               
+            }
+            lineObj.geo.attributes.position.needsUpdate = true;
         });
-    </script>
-</body>
 
+        // ==========================================
+        // 5. 镜头缓慢位移
+        // ==========================================
+        camera.position.x = Math.sin(customTime * 0.03) * 2.5; 
+        camera.position.y = Math.cos(customTime * 0.02) * 1.0; 
+        camera.position.z = 48.0 + Math.sin(customTime * 0.015) * 1.0; 
+        camera.up.set(0, 1, 0); 
+        camera.lookAt(0, 0, 0);
+
+        vjPass.uniforms["amount"].value = snappyBass * currentParams.glitchAmount;
+        vjPass.uniforms["time"].value = customTime;
+
+        composer.render();
+    }
+
+    animate();
+
+    window.addEventListener('resize', () => {
+        camera.aspect = window.innerWidth / window.innerHeight;
+        camera.updateProjectionMatrix();
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        composer.setSize(window.innerWidth, window.innerHeight);
+    });
+</script>
+</body>
 </html>
